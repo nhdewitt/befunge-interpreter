@@ -1,6 +1,9 @@
 class Stack:
     def __init__(self):
         self.items = []
+
+    def __repr__(self):
+        return f"Size: {self.size()} - Stack: {self.items}"
     
     def push(self, item):
         self.items.append(item)

@@ -1,4 +1,4 @@
-from random import shuffle, randint
+from random import randint
 
 class BefungeCode:
     def __init__(self, code: str):
@@ -15,10 +15,9 @@ class BefungeCode:
         self.steps = 1
 
     def shuffle(self):
-        shuffle(self.r_direction)
         return self.r_direction[randint(0, 3)]
     
-    def move(self, direction: str) -> str:
+    def change_direction(self, direction: str):
         if direction == ">":
             self.direction = "right"
         elif direction == "<":
@@ -28,11 +27,38 @@ class BefungeCode:
         elif direction == "v":
             self.direction = "down"
         elif direction == "?":
-            self.direction = self.shuffle()
+            self.direction = self.shuffle() 
+    
+    def move(self):
+        self.steps = 2 if self.skip else 1
+        #if direction == ">":
+        #    self.direction = "right"
+        #elif direction == "<":
+        #    self.direction = "left"
+        #elif direction == "^":
+        #    self.direction = "up"
+        #elif direction == "v":
+        #    self.direction = "down"
+        #elif direction == "?":
+        #    self.direction = self.shuffle()
 
-class Debug(BefungeCode):
+        if self.direction == "right":
+            self.x += self.steps
+        elif self.direction == "left":
+            self.x -= self.steps
+        elif self.direction == "up":
+            self.y -= self.steps
+        elif self.direction == "down":
+            self.y += self.steps
+        self.skip = False
+        self.x %= self.__width
+        self.y %= self.__height
+        return self.x, self.y
+
+class CodeDebug(BefungeCode):
     def __init__(self, code: str):
         super().__init__(code)
 
     def __str__(self):
-        return f"Grid: {self.grid}\nx: {self.x}, y: {self.y}\nDirection: {self.direction}\nSkip: {self.skip}\nString: {self.string}\n"
+        #return f"Grid: {self.grid}\nx: {self.x}, y: {self.y}\nDirection: {self.direction}\nSkip: {self.skip}\nString: {self.string}\n"
+        pass
