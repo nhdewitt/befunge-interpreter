@@ -29,3 +29,10 @@ class BefungeCode:
             self.direction = "down"
         elif direction == "?":
             self.direction = self.shuffle()
+
+class Debug(BefungeCode):
+    def __init__(self, code: str):
+        super().__init__(code)
+
+    def __str__(self):
+        return f"Grid: {self.grid}\nx: {self.x}, y: {self.y}\nDirection: {self.direction}\nSkip: {self.skip}\nString: {self.string}\n"

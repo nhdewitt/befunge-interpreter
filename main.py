@@ -5,12 +5,18 @@ import lambdas as L
 R_DIRECTION = ["up", "down", "left", "right"]
 
 def interpret(code):
+    debug = True
     stack = Stack()
-    code = BefungeCode(code)
+    if debug:
+        code = BefungeCode.Debug(code)
+    else:
+        code = BefungeCode(code)
     output = ""
     current_grid = code.grid[code.y][code.x]
 
     while current_grid != "@":
+        if debug:
+            print(code)
         if current_grid == '"':
             code.string = not code.string
         elif code.string:
@@ -93,3 +99,8 @@ def interpret(code):
         code.skip = False
     
     return output
+
+def main():
+    interpret("01->1# +# :# 0# g# ,# :# 5# 8# *# 4# +# -# _@")
+
+main()
