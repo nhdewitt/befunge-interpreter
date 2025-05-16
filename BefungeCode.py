@@ -1,7 +1,7 @@
 from random import shuffle, randint
 
 class BefungeCode:
-    def __init__(self, code):
+    def __init__(self, code: str):
         self.__lines = code.splitlines()
         self.__width = max(len(line) for line in self.__lines)
         self.__height = len(self.__lines)
@@ -18,7 +18,7 @@ class BefungeCode:
         shuffle(self.r_direction)
         return self.r_direction[randint(0, 3)]
     
-    def move(self, direction):
+    def move(self, direction: str) -> str:
         if direction == ">":
             self.direction = "right"
         elif direction == "<":

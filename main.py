@@ -61,6 +61,7 @@ def interpret(code):
             output += chr(stack.pop())
         elif current_grid == "#":
             code.skip = True
+            code.move(code.direction)
         elif current_grid == "p":
             a = stack.pop()
             b = stack.pop()
