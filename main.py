@@ -20,84 +20,133 @@ def interpret(code):
     current_grid = code.grid[code.y][code.x]
 
     while current_grid != "@":
+        
         if debug:
             print(output)
             print(stack)
+
         if current_grid == '"':
             code.string = not code.string
+
         elif code.string:
             stack.push(ord(current_grid))
+
         elif current_grid == ' ':
             pass
+
         elif current_grid in {'>','<','^','v','?','#'}:
             if current_grid == '#':
                 code.skip = True
             code.change_direction(current_grid)
+
         elif current_grid.isdigit():
             stack.push(int(current_grid))
+
         elif current_grid == "+":
             b, a = stack.pop_two()
             stack.push(L.add(a, b))
+
         elif current_grid == "-":
             b, a = stack.pop_two()
             stack.push(L.sub(a, b))
+
         elif current_grid == "*":
             b, a = stack.pop_two()
             stack.push(L.mul(a, b))
+
         elif current_grid == "/":
             b, a = stack.pop_two()
             stack.push(L.div(a, b))
+
         elif current_grid == "%":
             b, a = stack.pop_two()
             stack.push(L.mod(a, b))
+
         elif current_grid == "!":
             a = stack.pop()
             stack.push(L.l_not(a))
+
         elif current_grid == "`":
             b, a = stack.pop_two()
             stack.push(L.gt(a, b))
+
         elif current_grid == "_":
             code.direction = "right" if stack.pop() == 0 else "left"
+
         elif current_grid == "|":
             code.direction = "down" if stack.pop() == 0 else "up"
+
         elif current_grid == ":":
             stack.push(0 if stack.size() == 0 else stack.peek())
+
         elif current_grid == "\\":
             a = stack.pop()
             b = stack.pop()
             stack.push(a)
             stack.push(b)
+
         elif current_grid == "$":
             stack.pop()
+
         elif current_grid == ".":
             output += str(stack.pop())
+
         elif current_grid == ",":
             output += chr(stack.pop())
+
         elif current_grid == "p":
-            a = stack.pop()
-            b = stack.pop()
+            y = stack.pop()
+            x = stack.pop()
             v = stack.pop()
-            code.grid[a][b] = chr(v)
+            # edge wrapping
+            height = len(code.grid)
+            width = len(code.grid[0])
+            x = x % width
+            y = y % height
+            code.grid[y][x] = chr(v)
+
         elif current_grid == "g":
-            a = stack.pop()
-            b = stack.pop()
-            stack.push(ord(code.grid[a][b]))
-        #FIXME: out-of-bounds (factorial)
+            y = stack.pop()
+            x = stack.pop()
+            # edge wrapping
+            height = len(code.grid)
+            width = len(code.grid[0])
+            x = x % width
+            y = y % height
+            stack.push(ord(code.grid[y][x]))
+
         elif current_grid == "&":
-            stack.push(int(input()))
-        #FIXME: out-of-bounds
-        elif current_grid == "~":
-            stack.push(ord(input()))
-        
+            while True:                     # restrict input to one digit, re-prompt if invalid
+                raw = input(output)
+                if len(raw) != 1:
+                    raw = raw[0]
+                if not raw.isdigit():
+                    continue
+                else:
+                    break
+            stack.push(int(raw))
+            output = ""
+
+        elif current_grid == "~":           # restrict input to one character
+            raw = input(output)
+            if len(raw) != 1:
+                raw = raw[0]
+            stack.push(ord(raw))
+
         code.x, code.y = code.move()
         current_grid = code.grid[code.y][code.x]
         if output and output != last:
-            print(output, end="\r")
+            if output[-1] == '\n':
+                print(output, end="")       # flush the buffer with each newline
+                output = ""
+            else:
+                print(output, end="\r")     # rewrite the line
         last = output
         cycles += 1
-        time.sleep(0.005)
+        time.sleep(0.0005)
     
-    output += f" Cycles: {cycles}"
+    if debug:
+        output += f" Cycles: {cycles}"
     print(output)
     return
 
@@ -123,6 +172,8 @@ def main():
         except Exception as e:
             print(f"Error: {e}")
     else:
-        print("Please provide a filename as a command-line argument.")
+        with open("factorial.bf", 'r') as file:
+            content = file.read()
+            interpret(content)
 
 main()

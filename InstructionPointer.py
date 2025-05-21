@@ -2,10 +2,10 @@ from random import randint
 
 class InstructionPointer:
     def __init__(self, code: str):
-        self.__lines = code.splitlines()
-        self.__width = max(len(line) for line in self.__lines)
-        self.__height = len(self.__lines)
-        self.grid = [list(line.ljust(self.__width)) for line in self.__lines]
+        self.lines = code.splitlines()
+        self.width = max(len(line) for line in self.lines)
+        self.height = len(self.lines)
+        self.grid = [list(line.ljust(self.width)) for line in self.lines]
         self.x = 0
         self.y = 0
         self.direction = "right"
@@ -33,19 +33,21 @@ class InstructionPointer:
     
     def move(self):
         """Process the movement of the IP, 2 steps if current pointer=skip else 1"""
-        self.steps = 2 if self.skip else 1
-
-        if self.direction == "right":
-            self.x += self.steps
-        elif self.direction == "left":
-            self.x -= self.steps
-        elif self.direction == "up":
-            self.y -= self.steps
-        elif self.direction == "down":
-            self.y += self.steps
-        self.skip = False                   # reset skip after movement
-        self.x %= self.__width              # handle wrapping
-        self.y %= self.__height
+        deltas = {
+            "right": (1, 0),
+            "left": (-1, 0),
+            "down":  (0, 1),
+            "up":   (0, -1),
+        }
+        dx, dy = deltas[self.direction]
+        if self.skip:
+            dx2, dy2 = deltas[self.direction]
+            dx += dx2
+            dy += dy2
+            self.skip = False
+        
+        self.x = (self.x + dx) % self.width         # edge wrapping
+        self.y = (self.y + dy) % self.height
         return self.x, self.y
 
 class IPDebug(InstructionPointer):
