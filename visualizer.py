@@ -1,23 +1,61 @@
-# from datetime import datetime
+from textual.app import App, ComposeResult
+from textual.containers import Container
+from textual.binding import Binding
+from textual.widgets import Static
 
-# from textual.app import App, ComposeResult
-# from textual.widgets import Footer, Header
+class BefungeOutput(Static):
+    """Custom widget for displaying Befunge output"""
+    
+    DEFAULT_CSS = """
+    BefungeOutput {
+        display: block;
+        width: 60;
+        height: 20;
+        background: #2d2d2d;
+        color: lime;
+        border: solid lime;
+        padding: 1;
+        content-align: left middle;
+    }
+    """
 
+class BefungeApp(App):
+    """Main Befunge interpreter application"""
+    
+    CSS = """
+    Screen {
+        background: #000000;
+    }
 
-# class BefungeVisualizer(App):
+    Container {
+        align: center middle;
+    }
+    """
 
-#     BINDINGS = [("d", "toggle_dark", "Toggle dark mode")]
+    BINDINGS = [
+        Binding("q", "quit", "Quit")
+    ]
 
-#     def compose(self) -> ComposeResult:
-#         """Create child widgets for the app."""
-#         yield Header(name="Befunge Visualizer", show_clock=True, icon='A')
-#         yield Footer()
+    def __init__(self, interpret_fn, code):
+        super().__init__()
+        self.interpret_fn = interpret_fn
+        self.code = code
+        self.output = ""
 
-#     def action_toggle_dark(self) -> None:
-#         """An action to toggle dark mode."""
-#         self.theme = {
-#             "textual-dark" if self.theme == "textual-light" else "textual-light"
-#         }
+    def compose(self) -> ComposeResult:
+        with Container():
+            yield BefungeOutput("Starting...", id="display")
 
-# app = BefungeVisualizer()
-# app.run()
+    async def on_mount(self) -> None:
+        self.display = self.query_one(BefungeOutput)
+        gen = self.interpret_fn(self.code)
+        
+        while True:
+            try:
+                output = next(gen)
+                if output:
+                    self.output += str(output)
+                    self.display.update(self.output)
+            except StopIteration:
+                self.display.update(self.output + "\n[Done]")
+                break
