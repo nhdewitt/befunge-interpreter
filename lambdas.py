@@ -1,4 +1,5 @@
 # Modified to return 0 for any None values to prevent TypeError
+# adding to force github to recognize this as a change
 
 add   = lambda a, b: (a or 0) + (b or 0)
 sub   = lambda a, b: (a or 0) - (b or 0)
