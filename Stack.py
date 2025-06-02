@@ -6,6 +6,15 @@ class Stack:
     def __repr__(self):
         return f"Size: {self.size()} - Stack: {self.items}"
     
+    def __iter__(self):
+        return iter(self.items)
+    
+    def __len__(self):
+        return self.size()
+    
+    def __getitem__(self, idx):
+        return self.items[idx]
+    
     def push(self, item):
         self.items.append(item)
 
@@ -14,7 +23,7 @@ class Stack:
     
     def peek(self):
         """Return top of stack without popping"""
-        return self.items[-1] if self.items else None
+        return self.items[-1] if self.items else 0
     
     def pop(self):
         """Pop stack, 0 if empty"""

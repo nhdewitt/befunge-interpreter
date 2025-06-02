@@ -2,10 +2,14 @@ from random import randint
 
 class InstructionPointer:
     def __init__(self, code: str):
-        self.lines = code.splitlines()
-        self.width = max(len(line) for line in self.lines)
-        self.height = len(self.lines)
-        self.grid = [list(line.ljust(self.width)) for line in self.lines]
+        if isinstance(code, str):
+            lines = code.splitlines()
+            self.grid = [list(line) for line in lines]
+        else:
+            self.grid = code
+        
+        self.height = len(self.grid)
+        self.width = len(self.grid[0])
         self.x = 0
         self.y = 0
         self.direction = "right"
@@ -13,6 +17,9 @@ class InstructionPointer:
         self.string = False
         self.r_direction = ["right", "left", "up", "down"]
         self.steps = 1
+        self.last_was_random = False
+        self.waiting_for = None  # None, "int", "char"
+        self.pending_input = None  # Input value to be processed later
 
     def shuffle(self):
         """Return a random direction when IP=?"""
@@ -22,14 +29,21 @@ class InstructionPointer:
         """Evaluate the current IP and change direction"""
         if direction == ">":
             self.direction = "right"
+            self.last_was_random = False
         elif direction == "<":
             self.direction = "left"
+            self.last_was_random = False
         elif direction == "^":
             self.direction = "up"
+            self.last_was_random = False
         elif direction == "v":
             self.direction = "down"
+            self.last_was_random = False
         elif direction == "?":
-            self.direction = self.shuffle() 
+            self.direction = self.shuffle()
+            self.last_was_random = True
+        elif direction == "#":
+            return
     
     def move(self):
         """Process the movement of the IP, 2 steps if current pointer=skip else 1"""
