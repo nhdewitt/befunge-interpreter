@@ -1,9 +1,18 @@
+import sys
 from Stack import Stack
 from InstructionPointer import InstructionPointer, IPDebug
-from visualizer import BefungeDisplay
+#from visualizer import BefungeDisplay
+from rich_display import RichBefungeDisplay
 import dispatch_table
 
 R_DIRECTION = ["up", "down", "left", "right"]
+
+def load_befunge_grid_from_file(filename):
+    with open(filename, 'r', encoding='utf-8') as f:
+        lines = f.read().splitlines()
+    max_width = max(len(line) for line in lines)
+    grid = [list(line.ljust(max_width, " ")) for line in lines]
+    return grid
 
 def interpret_steps(code):
     """Generator that yields a tuple on each iteration:
@@ -54,30 +63,17 @@ def interpret_steps(code):
     # Yield final @ state:
     yield ip, list(stack), output
 
-
 def main():
-    import sys
-
-    if len(sys.argv) > 1:
-        filename = sys.argv[1]
+    if len(sys.argv) != 2:
+        print("Usage: python main.py <befunge_file>")
+        sys.exit(1)
     else:
-        filename = "test.bf"
-    
-    try:
-        with open(filename, 'r') as f:
-            content = f.read().splitlines()
-    except:
-        print(f"{filename} not found.")
-        return
-    
-    code_grid = [list(line) for line in content]
-    max_width = max(len(row) for row in code_grid)
-    code_grid = [row + [' '] * (max_width - len(row)) for row in code_grid]
-    
-    interpreter_gen = interpret_steps(code_grid)
+        path = sys.argv[1]
 
-    display = BefungeDisplay(code_grid)
-    display.run(interpreter_gen)  # Pass the generator to the display
+    grid = load_befunge_grid_from_file(path)
+    interpreter = interpret_steps(grid)
+    display = RichBefungeDisplay(grid)
+    display.run(interpreter)
 
 if __name__ == "__main__":
     main()
