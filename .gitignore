@@ -6,3 +6,9 @@ __pycache__/
 *.log
 *.bf
 .vscode/
+*.befmeta.*
+tests/
+build/
+dist/
+main.spec
+tools/
