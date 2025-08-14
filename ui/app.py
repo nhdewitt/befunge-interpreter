@@ -1,4 +1,5 @@
 import json, os, tempfile
+from typing import Set, Tuple
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog, messagebox
@@ -9,11 +10,12 @@ from ui.format_stack import fmt_stack_item
 
 COL_WIDTHS = compute_widths(OPCODES)
 
-SETTINGS_VERSION = 1
+SETTINGS_VERSION = 2
 DEFAULT_SETTINGS = {
     "version":      SETTINGS_VERSION,
     "delay_ms":         50,
     "steps_per_tick":   1,
+    "breakpoints":      [],
 }
 
 def tooltip_formatter(ch: str) -> str:
@@ -47,10 +49,12 @@ class App(ttk.Frame):
 
         self.speed_ms = tk.IntVar(value=DEFAULT_SETTINGS["delay_ms"])                   # delay between ticks (ms)
         self.steps_per_tick = tk.IntVar(value=DEFAULT_SETTINGS["steps_per_tick"])       # number of steps per tick
+        self.breakpoints: Set[Tuple[int, int]] = set()                                  # user-toggled breakpoints
 
-        self._last_saved_settings: dict[str, int] = {
+        self._last_saved_settings: dict[str, object] = {
             "delay_ms":         int(self.speed_ms.get()),
             "steps_per_tick":   int(self.steps_per_tick.get()),
+            "breakpoints":      [],     # updated after load
         }
         self._settings_changed = False
         self._suspend_setting_traces = False
@@ -265,7 +269,11 @@ class App(ttk.Frame):
         self.text.configure(state="disabled")
         self.text.pack(fill=tk.BOTH, expand=True)
 
-        self._hover = OpcodeHoverTip(self.text, formatter=tooltip_formatter, delay=250)        
+        self._hover = OpcodeHoverTip(self.text, formatter=tooltip_formatter, delay=250)     
+
+        self.text.tag_configure("bp", background="#ffb3b3")   
+        self.text.tag_configure("ip", background="#ffe08a")
+        self.text.tag_raise("ip")
 
         self.status = ttk.Label(self, anchor="w")
         self.status.pack(fill=tk.X)
@@ -275,6 +283,7 @@ class App(ttk.Frame):
         self.master.bind("<F5>", lambda e: self.run())
         self.master.bind("<F10>", lambda e: self.step_once())
         self.master.bind("<Escape>", lambda e: self.stop())
+        self.master.bind("<Control-Button-1>", self._on_toggle_bp_click, add=True)
 
     def run(self, interval_ms: int | None = None, *,
             resume: bool = True, clear_output: bool = False):
@@ -290,17 +299,32 @@ class App(ttk.Frame):
 
     def step_once(self):
         self._cancel_timer()
+
+        if not (self._out_win and self._out_win.winfo_exists()):
+            self.open_output_window(clear=False)
+            self.out_len = len(self.interp.output)
+
+        status = self.interp.step()
+
         self.render()
         self._append_output_if_needed()
-        if StepStatus.AWAITING_INPUT:
+
+        if status is StepStatus.AWAITING_INPUT:
             self._show_input_bar()
-        elif StepStatus.HALTED:
-            pass    # leave the output window open with the final text
 
     def tick(self, interval=10):
         status = StepStatus.RUNNING
         steps = self.steps_per_tick.get()
+
         for _ in range(steps):
+            ip = self.interp.ip
+            if (ip.x, ip.y) in self.breakpoints:
+                self._cancel_timer()
+                self.status.config(text=f"Paused at breakpoint ({ip.x},{ip.y})")
+                self.render()
+                self._append_output_if_needed()
+                return
+            
             status = self.interp.step()
             if status is not StepStatus.RUNNING:
                 break
@@ -397,28 +421,32 @@ class App(ttk.Frame):
         self.text.tag_add("ip", f"{ip.y+1}.{ip.x}", f"{ip.y+1}.{ip.x+1}")
         self.text.configure(state="disabled")
 
-        self.status.config(text=f"IP=({ip.x},{ip.y}) [{ip.direction.glyph}]  Stack size={len(self.interp.stack)}")
+        self._paint_breakpoints()
+
+        self.status.config(text=f"IP=({ip.x},{ip.y}) [{ip.direction.glyph}] {'[RANDOM]' if ip.last_was_random else ''}  Stack size={len(self.interp.stack)}")
 
         self._refresh_stack_view()
 
     def _sidecar_path(self, program_path: str) -> str:
         return program_path + ".befmeta.json"
     
-    def _current_settings(self) -> dict[str, int]:
+    def _current_settings(self) -> dict[str, object]:
+        bps = [{"x": x, "y": y} for (x, y) in sorted(self.breakpoints)]
         return {
             "delay_ms":         int(self.speed_ms.get()),
             "steps_per_tick":   int(self.steps_per_tick.get()),
+            "breakpoints":      bps,
         }
     
     def _save_sidecar_settings_if_changed(self):
-        if not self.current_path or self._settings_changed:
+        if not self.current_path or not self._settings_changed:
             return
         self._save_sidecar_settings()
 
     def _on_settings_change(self, *_):
         if self._suspend_setting_traces:
             return
-        self._settings_dirty = (self._current_settings() != self._last_saved_settings)
+        self._settings_changed = (self._current_settings() != self._last_saved_settings)
     
     def _load_sidecar_settings(self, program_path: str):
         """Read JSON and, if present, apply delay/steps to loaded file."""
@@ -430,8 +458,9 @@ class App(ttk.Frame):
         except Exception:
             meta = {}      # TODO: handle corrupted JSON (or just keep ignoring? new changes will overwrite)
         
-        delay = meta.get("delay_ms")
-        steps = meta.get("steps_per_tick")
+        delay   = meta.get("delay_ms")
+        steps   = meta.get("steps_per_tick")
+        bps     = meta.get("breakpoints", [])
 
         self._suspend_setting_traces = True
         try:
@@ -441,6 +470,12 @@ class App(ttk.Frame):
                 self.steps_per_tick.set(steps)
         finally:
             self._suspend_setting_traces = False
+
+        self.breakpoints.clear()
+        if isinstance(bps, list):
+            for bp in bps:
+                if isinstance(bp, dict) and "x" in bp and "y" in bp:
+                    self.breakpoints.add((int(bp["x"]), int(bp["y"])))
 
         self._last_saved_settings = self._current_settings()
         self._settings_dirty = False
@@ -454,7 +489,7 @@ class App(ttk.Frame):
             **self._current_settings(),
         }
         sidecar = self._sidecar_path(self.current_path)
-        dir_ = os.path.dirname(sidecar)
+        dir_ = os.path.dirname(sidecar) or "."
         try:
             fd, tmp = tempfile.mkstemp(prefix=".befmeta.", dir=dir_, text=True)
             try:
@@ -472,6 +507,41 @@ class App(ttk.Frame):
 
         self._last_saved_settings = self._current_settings()
         self._settings_changed = False
+
+    def _index_to_xy(self, index: str) -> tuple[int, int]:
+        line, col = index.split(".")
+        y = int(line) - 1
+        x = int(col)
+        return x, y
+    
+    def _xy_to_index(self, x: int, y: int) -> tuple[str, str]:
+        start = f"{y+1}.{x}"
+        end = f"{y+1}.{x+1}"
+        return start, end
+    
+    def _on_toggle_bp_click(self, e):
+        idx = self.text.index(f"@{e.x},{e.y}")
+        ch = self.text.get(idx, f"{idx}+1c")
+        if ch == "\n":
+            return
+        x, y = self._index_to_xy(idx)
+        self._toggle_breakpoint(x, y)
+
+    def _toggle_breakpoint(self, x: int, y: int):
+        key = (x, y)
+        if key in self.breakpoints:
+            self.breakpoints.remove(key)
+        else:
+            self.breakpoints.add(key)
+        self._settings_changed = True
+        self._paint_breakpoints()
+
+    def _paint_breakpoints(self):
+        self.text.tag_remove("bp", "1.0", "end")
+        for (x, y) in self.breakpoints:
+            start, end = self._xy_to_index(x, y)
+            self.text.tag_add("bp", start, end)
+        self.text.tag_raise("ip")
 
     def _prefill_output_from_interpreter(self):
         if not (self._out_win and self._out_txt and self._out_win.winfo_exists()):

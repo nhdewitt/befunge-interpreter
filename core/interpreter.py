@@ -393,7 +393,7 @@ class Interpreter:
         else:
             self.stack.push(0)
 
-    def _if_h(self) -> Callable:
+    def _if_h(self) -> Callable[[], None]:
         """
         Create handler for `_` (horizontal if) opcode.
 
@@ -403,10 +403,11 @@ class Interpreter:
         Returns:
             Function that implements horizontal conditional logic.
         """
-        return lambda: setattr(self.ip, "direction",
-                               Direction.RIGHT if self._pop_or_zero() == 0 else Direction.LEFT)
+        return lambda: self.ip.change_direction(
+            Direction.RIGHT if self._pop_or_zero() == 0 else Direction.LEFT
+        )
     
-    def _if_v(self) -> Callable:
+    def _if_v(self) -> Callable[[], None]:
         """
         Create handler for `|` (vertical if) opcode.
 
@@ -416,16 +417,17 @@ class Interpreter:
         Returns:
             Function that implements vertical conditional logic.
         """
-        return lambda: setattr(self.ip, "direction",
-                               Direction.DOWN if self._pop_or_zero() == 0 else Direction.UP)
+        return lambda: self.ip.change_direction(
+            Direction.DOWN if self._pop_or_zero() == 0 else Direction.UP
+        )
     
-    def _rand_dir(self) -> Direction:
+    def _rand_dir(self) -> None:
         """
         Implement the `?` (random direction) opcode.
 
         Sets the instruction pointer direction to a random cardinal direction.
         """
-        return Direction.random()
+        self.ip.change_direction('?')
     
     def _dup(self) -> None:
         """
@@ -492,7 +494,7 @@ class Interpreter:
         """
         if isinstance(d, str):
             d = Direction.from_char(d)
-        self.ip.direction = d
+        self.ip.change_direction(d)
 
     def _bridge(self) -> None:
         """
