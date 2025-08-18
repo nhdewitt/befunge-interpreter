@@ -17,103 +17,17 @@ Key features:
 """
 
 from __future__ import annotations
-from enum import Enum, auto
 from dataclasses import dataclass
-from typing import List, Callable, Dict, Optional, Union
+from io import StringIO
+from typing import List, Callable, Dict, Union
 from random import choice
 import operator as op
 
-from core.InstructionPointer import InstructionPointer
-from core.direction import Direction
-from core.stack import Stack
-
-def trunc_div(a: int, b: int) -> int:
-    """
-    Perform truncating integer division.
-
-    Matches C-style truncation towards zero rather than Python's
-    floor division.
-
-    Args:
-        `a`: Dividend (numerator)
-        `b`: Divisor (denominator)
-    
-    Returns:
-        The quotient truncated towards zero, or 0 if dividing by zero
-
-    Example:
-        ```
-        >>> trunc_div(7, 3)
-        2
-        >>> trunc_div(-7, 3)
-        -2
-        >>> trunc_div(5, 0)
-        0
-        ```
-    """
-    if b == 0:
-        return 0    # Befunge-93 defines as returning zero
-    return int(a / b)
-
-def c_mod(a: int, b: int) -> int:
-    """
-    Perform modulo operation with C-style semantics for negative numbers.
-
-    Args:
-        `a`: Dividend
-        `b`: Divisor
-
-    Returns:
-        The remainder following C-style modulo rules, or 0 if modulo by zero
-
-    Example:
-        ```
-        >>> c_mod(7, 3)
-        1
-        >>> c_mod(-7, 3)
-        -1
-        >>> c_mode(5, 0)
-        0
-        ```
-    """
-    if b == 0:
-        return 0    # Befunge-93 defines as returning zero
-    q = trunc_div(a, b)
-    return a - q * b
-
-class StepStatus(Enum):
-    """
-    Enumeration of possible interpreter execution states.
-
-    Used to communicate the current status of the interpreter after each
-    execution state, allowing the GUI to respond appropriately.
-    """
-    RUNNING = auto()            # executing normally
-    AWAITING_INPUT = auto()     # waiting for user input
-    HALTED = auto()             # terminated (reached `@` opcode)
-
-@dataclass
-class ViewState:
-    """
-    Immutable snapshot of interpreter state for GUI display.
-
-    Provides all necessary information for visualizing the current
-    interpreter state without exposing mutable internal objects.
-
-    Attributes:
-        `ip_x`: Current IP x-coordinate
-        `ip_y`: Current IP y-coordinate
-        `direction`: Current movement direction as a string
-        `stack`: Copy of current stack contents (bottom->top)
-        `output`: Complete output string produced so far
-        `grid`: Copy of the current program grid
-    """
-    ip_x:       int
-    ip_y:       int
-    direction:  str
-    stack:      List[int]
-    output:     str
-    grid:       List[List[str]]
+from .InstructionPointer import InstructionPointer
+from .direction import Direction
+from .ops import build_ops
+from .stack import Stack
+from .types import StepStatus, ViewState, WaitTypes
 
 class Interpreter:
     """
@@ -145,52 +59,15 @@ class Interpreter:
             `code`: Either a string containing Befunge source (with newlines),
                     or a 2D list of characters representing the program grid
         """
-        # Initialize opcode dispatch table
-        self._ops: Dict[str, Callable] = {
-            # Arithmetic operations
-            '+': lambda: self._bin(op.add),     # Addition
-            '-': lambda: self._bin(op.sub),     # Subtraction
-            '*': lambda: self._bin(op.mul),     # Multiplication
-            '/': lambda: self._bin(trunc_div),  # Division (C-style)
-            '%': lambda: self._bin(c_mod),      # Modulo (C-style)
-
-            # Comparison and logic
-            '`': self._gt,                      # Greater than
-            '!': self._not,                     # Logical NOT
-
-            # Self-modifying code
-            'p': self._put,                     # Put character into grid
-            'g': self._get,                     # Get character from grid
-
-            # Input operations
-            '&': lambda: self._await('int'),    # Read integer from user
-            '~': lambda: self._await('char'),   # Read char from user
-
-            # Flow control
-            '_': self._if_h(),                  # Horizontal conditional
-            '|': self._if_v(),                  # Vertical conditional
-
-            # Stack operations
-            ':': self._dup,                     # Duplicate top of stack
-            '\\': self._swap,                   # Swap top two elements of stack
-            '$': self._pop1,                    # Pop and discard
-
-            # Output operations
-            '.': self._out_int,                 # Output integer
-            ',': self._out_char,                # Output character
-
-            # Direction changes
-            '>': lambda: self._set_dir(Direction.RIGHT),
-            '<': lambda: self._set_dir(Direction.LEFT),
-            '^': lambda: self._set_dir(Direction.UP),
-            'v': lambda: self._set_dir(Direction.DOWN),
-            '?': self._rand_dir,                # Random direction
-
-            # Control flow
-            '#': self._bridge,                  # Bridge (skip next cell)
-        }
-
+        # Initialize opcode dispatch table and load Befunge code
+        self._ops: Dict[str, Callable] = build_ops(self)
         self.load(code)
+        self.output_stream = StringIO()
+
+    @property
+    def output(self) -> str:
+        """Get the complete output as a string."""
+        return self.output_stream.getvalue()
 
     def load(self, code: Union[str, List[List[str]]]) -> None:
         """
@@ -204,8 +81,10 @@ class Interpreter:
         """
         self.stack: Stack = Stack()
         self.ip: InstructionPointer = InstructionPointer(code)
-        self.output = ""
         self.halted = False
+
+        # Track grid revision - only need to redraw on "p" or load()
+        self.grid_rev = (getattr(self, "grid_rev", -1) + 1)
 
     def reset(self) -> None:
         """
@@ -215,7 +94,10 @@ class Interpreter:
         stack, output, and all execution state while preserving any
         modifications made to the grid by `p` operations.
         """
-        self.load(self.ip.grid)
+        self.stack = Stack()
+        self.ip = InstructionPointer(self.ip.grid)
+        self.output_stream = StringIO()
+        self.halted = False
     
     def view(self) -> ViewState:
         """
@@ -279,7 +161,7 @@ class Interpreter:
         ch = self.ip.grid[self.ip.y][self.ip.x]
         
         # Handle program termination
-        if ch == '@':
+        if not self.ip.string and ch == '@':
             self.halted = True
             return StepStatus.HALTED
         
@@ -297,7 +179,7 @@ class Interpreter:
 
         # Digits 0-9 push their numeric value
         elif ch.isdigit():
-            self.stack.push(ord(ch) - 48)
+            self.stack.push(int(ch))
 
         else:
             # Look up and execute opcode
@@ -345,25 +227,12 @@ class Interpreter:
         a = self._pop_or_zero()
         self.stack.push(0 if a else 1)
 
-    def _await(self, kind: str) -> StepStatus:
-        """
-        Set up the interpreter to wait for input of the specified type.
-
-        Args:
-            `kind`: Either `int` for `&` opcode or `char` for `~` opcode
-
-        Returns:
-            `StepStatus.AWAITING_INPUT` to signal GUI to request input
-        """
-        self.ip.waiting_for = kind
-        return StepStatus.AWAITING_INPUT
-    
     def _put(self) -> None:
         """
         Implement the `p` (put) opcode for self-modifying code.
 
         Pops `y`, `x`, and `v` from stack, then sets `grid[y][x] = chr(v)`.
-        Coorinates wrap around grid boundaries. This allows Befunge
+        Coordinates wrap around grid boundaries. This allows Befunge
         programs to modify their own source code during execution.
         """
         y = self._pop_or_zero()
@@ -374,6 +243,7 @@ class Interpreter:
         if h and w:
             # Wrap coordinates and convert value to character
             self.ip.grid[y % h][x % w] = chr(v % 256)
+            self.grid_rev += 1
 
     def _get(self) -> None:
         """
@@ -392,6 +262,19 @@ class Interpreter:
             self.stack.push(ord(self.ip.grid[y % h][x % w]))
         else:
             self.stack.push(0)
+
+    def _await(self, kind: WaitTypes) -> StepStatus:
+        """
+        Set up the interpreter to wait for input of the specified type.
+
+        Args:
+            `kind`: Either `int` for `&` opcode or `char` for `~` opcode
+
+        Returns:
+            `StepStatus.AWAITING_INPUT` to signal GUI to request input
+        """
+        self.ip.waiting_for = kind
+        return StepStatus.AWAITING_INPUT
 
     def _if_h(self) -> Callable[[], None]:
         """
@@ -420,14 +303,6 @@ class Interpreter:
         return lambda: self.ip.change_direction(
             Direction.DOWN if self._pop_or_zero() == 0 else Direction.UP
         )
-    
-    def _rand_dir(self) -> None:
-        """
-        Implement the `?` (random direction) opcode.
-
-        Sets the instruction pointer direction to a random cardinal direction.
-        """
-        self.ip.change_direction('?')
     
     def _dup(self) -> None:
         """
@@ -474,7 +349,7 @@ class Interpreter:
         Pops a value from the stack and appends it to the output
         string as a decimal integer.
         """
-        self.output += str(self._pop_or_zero())
+        self.output_stream.write(str(self._pop_or_zero()))
 
     def _out_char(self) -> None:
         """
@@ -483,18 +358,24 @@ class Interpreter:
         Pops a value from the stack, converts it to a character
         (modulo 256 for ASCII range), and appends to output.
         """
-        self.output += chr(self._pop_or_zero() % 256)
+        self.output_stream.write(chr(self._pop_or_zero() % 256))
 
-    def _set_dir(self, d: Union[Direction, str]) -> None:
+    def _set_dir(self, d: Direction) -> None:
         """
         Set the IP direction.
 
         Args:
-            `d`: Either a `Direction` enum value or a direction character
+            `d`: A `Direction` Enum value
         """
-        if isinstance(d, str):
-            d = Direction.from_char(d)
         self.ip.change_direction(d)
+
+    def _rand_dir(self) -> None:
+        """
+        Implement the `?` (random direction) opcode.
+
+        Sets the instruction pointer direction to a random cardinal direction.
+        """
+        self.ip.change_direction(Direction.random(), from_random=True)
 
     def _bridge(self) -> None:
         """

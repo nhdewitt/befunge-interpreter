@@ -2,13 +2,17 @@
 Befunge Instruction Pointer
 
 Implements the IP for a Befunge interpreter. The IP maintains the current
-position and direction within the 2D grid, handles movement with wraparound
+position and direction within the 2D grid, handles movement with wraparound,
 and manages execution state.
 """
 
-from typing import Sequence, Tuple, Optional, Union
-from random import choice
-from core.direction import Direction
+from typing import Sequence, Optional, Tuple, Union
+
+from .direction import Direction
+from .types import WaitTypes
+
+MIN_WIDTH   = 80
+MIN_HEIGHT  = 25
 
 class InstructionPointer:
     """
@@ -25,7 +29,7 @@ class InstructionPointer:
         `string`: Whether or not the IP is in string mode
         `steps`: Number of cycles run
         `last_was_random`: Whether the last direction change was random
-        `waiting_for`: Type of input expected (`int`, `char` or `None`)
+        `waiting_for`: Type of input expected (`WaitTypes` or `None`)
         `pending_input`: Input value waiting to be processed
     """
     def __init__(self, code: Union[str, Sequence[Sequence[str]]]) -> None:
@@ -48,11 +52,13 @@ class InstructionPointer:
         else:
             lines = ["".join(row) for row in code]
 
+        # Store original dimensions before padding
+        self.orig_width = max((len(l) for l in lines), default=0)
+        self.orig_height = len(lines)
+
         # calculate dimensions
-        W = max((len(l) for l in lines), default=0)
-        H = len(lines)
-        W = max(80, W)
-        H = max(25, H)
+        W = max(MIN_WIDTH, self.orig_width)
+        H = max(MIN_HEIGHT, self.orig_height)
 
         # create uniform grid with padding
         self.grid: list[list[str]] = [list(l.ljust(W, ' ')) for l in lines]
@@ -68,56 +74,27 @@ class InstructionPointer:
         # execution state flags
         self.skip = False
         self.string = False
-        self.steps = 1
         self.last_was_random = False
 
         # I/O states
-        self.waiting_for: Optional[str] = None
+        self.waiting_for: Optional[WaitTypes] = None
         self.pending_input: Optional[int] = None
-
-    def shuffle(self):
-        """
-        Generate a random direction for the '`?`' opcode.
-
-        Returns:
-            A randomly selected `Direction`
-        """
-        return Direction.random()
     
-    def change_direction(self, token: Union[str, Direction]):
+    def change_direction(self, d: Direction, *, from_random: bool = False) -> None:
         """
         Update the IP's direction based on a token or Direction
 
-        Handles various commands:
-        - `Direction` objects: Set direction directly
-        - `>`, `<`, `^`, `v`: Set cardinal direction
-        - `?`: Set random direction
-        - `#`: No direction change, but sets the skip flag
-
         Args:
-            `token`: Either a `Direction` enum value or a string
-                     representing a direction/control opcode
+            `d`: A `Direction` enum value
 
         Side Effects:
-            - Updates `self.direction` for most tokens
             - Sets `self.last_was_random` for random direction changes
             - May set `self.skip` flag for bridge commands 
         """
-        if isinstance(token, Direction):
-            self.direction = token
-            self.last_was_random = False
-            return
-        if token == '?':
-            self.direction = Direction.random()
-            self.last_was_random = True
-            return
-        if token == '#':
-            return
-
-        self.direction = Direction.from_char(token)
-        self.last_was_random = False
+        self.direction = d
+        self.last_was_random = from_random
     
-    def move(self):
+    def move(self) -> Tuple[int, int]:
         """
         Move the IP one step in its current direction.
 

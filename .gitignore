@@ -12,3 +12,4 @@ build/
 dist/
 main.spec
 tools/
+src/*.txt

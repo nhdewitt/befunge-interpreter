@@ -41,8 +41,8 @@ class Direction(Enum):
         self.dy = dy
         self.glyph = glyph
 
-    @classmethod
-    def from_char(cls, ch: str) -> "Direction":
+    @staticmethod
+    def from_opcode(ch: str) -> "Direction":
         """
         Convert a Befunge direction opcode character to a `Direction` enum.
 
@@ -67,23 +67,23 @@ class Direction(Enum):
         ```
         """
         return {
-            '>':    cls.RIGHT,
-            '<':    cls.LEFT,
-            '^':    cls.UP,
-            'v':    cls.DOWN,
+            '>':    Direction.RIGHT,
+            '<':    Direction.LEFT,
+            '^':    Direction.UP,
+            'v':    Direction.DOWN,
         }[ch]
     
-    @classmethod
-    def random(cls) -> "Direction":
+    @staticmethod
+    def random() -> "Direction":
         """
         Return a random direction from the four cardinal directions.
 
         Used by the Befunge '?' opcode
 
         Returns:
-            A randomly selection `Directon` from `RIGHT`, `LEFT`, `UP`, or `DOWN`
+            A randomly selection `Direction` from `RIGHT`, `LEFT`, `UP`, or `DOWN`
         """
-        return choice([cls.RIGHT, cls.LEFT, cls.UP, cls.DOWN])
+        return choice([Direction.RIGHT, Direction.LEFT, Direction.UP, Direction.DOWN])
     
     def __str__(self):
         """
