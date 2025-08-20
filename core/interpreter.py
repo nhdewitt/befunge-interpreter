@@ -64,6 +64,9 @@ class Interpreter:
         self.load(code)
         self.output_stream = StringIO()
 
+        # Shadow storage for put/get values > 255
+        self.extended_storage = {}  # Maps (x,y) -> full 32-bit value
+
     @property
     def output(self) -> str:
         """Get the complete output as a string."""
@@ -81,6 +84,7 @@ class Interpreter:
         """
         self.stack: Stack = Stack()
         self.ip: InstructionPointer = InstructionPointer(code)
+        self.output_stream = StringIO()
         self.halted = False
 
         # Track grid revision - only need to redraw on "p" or load()
@@ -238,12 +242,26 @@ class Interpreter:
         y = self._pop_or_zero()
         x = self._pop_or_zero()
         v = self._pop_or_zero()
+
         h = len(self.ip.grid)
         w = len(self.ip.grid[0]) if self.ip.grid else 0
+
         if h and w:
             # Wrap coordinates and convert value to character
-            self.ip.grid[y % h][x % w] = chr(v % 256)
-            self.grid_rev += 1
+            x = x % w
+            y = y % h
+
+            if v > 255 or v < 0:
+                # Store full value in shadow dictionary
+                self.extended_storage[(x, y)] = v
+                # Store low byte in grid as a preview
+                self.ip.grid[y][x] = chr(abs(v) % 256)
+            else:
+                # Normal storage
+                self.ip.grid[y][x] = chr(v)
+                # Clear extended storage
+                if (x, y) in self.extended_storage:
+                    del self.extended_storage[(x, y)]
 
     def _get(self) -> None:
         """
@@ -255,11 +273,20 @@ class Interpreter:
         """
         y = self._pop_or_zero()
         x = self._pop_or_zero()
+
         h = len(self.ip.grid)
         w = len(self.ip.grid[0]) if self.ip.grid else 0
+
         if h and w:
-            # Wrap coordinates and get ASCII value
-            self.stack.push(ord(self.ip.grid[y % h][x % w]))
+            x = x % w
+            y = y % h
+
+            # Check extended storage
+            if (x, y) in self.extended_storage:
+                self.stack.push(self.extended_storage[(x, y)])
+            else:
+                self.stack.push(ord(self.ip.grid[y][x]))
+        
         else:
             self.stack.push(0)
 

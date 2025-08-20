@@ -582,8 +582,11 @@ class App(ttk.Frame):
         ).pack(anchor=tk.CENTER)
 
         # Main code display
-        self.text = tk.Text(self, width=80, height=25, font=("Consolas", 12))
-        self.text.configure(state=tk.DISABLED)
+        self.text = tk.Text(self, width=80, height=25,
+                            font=("Consolas", 12),
+                            background="#011b04", fg="#44C553",
+                            wrap=tk.NONE)
+        self.text.configure(setgrid=True, spacing1=0, spacing2=0, spacing3=0)
         self.text.pack(fill=tk.BOTH, expand=True)
 
         # Interactive tooltip system
@@ -596,9 +599,13 @@ class App(ttk.Frame):
                                      ))     
 
         # Visual styling for debugging features
-        self.text.tag_configure("bp", background="#ffb3b3")         # Breakpoints: light red
-        self.text.tag_configure("ip", background="#ffe08a")         # IP: light orange
-        self.text.tag_raise("ip")                                     # IP highlight takes precedence
+        self.text.tag_configure("bp", background="#ff6b3d", foreground="#011b04")         # Breakpoints: orange-red
+        self.text.tag_configure("ip", background="#00d1a0", foreground="#011b04")         # IP: mint
+        self.text.tag_configure("hover_cell", background="#0a2516", foreground="#4ed05d")
+        
+        self.text.tag_raise("ip")
+        self.text.tag_raise("bp")
+        self.text.tag_raise("hover_cell")
 
         # Status bar
         self.status = ttk.Label(self, anchor="w")

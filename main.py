@@ -21,6 +21,8 @@ def main():
     args = parser.parse_args()
 
     root = tk.Tk()
+    root.attributes("-alpha", 0.95)
+    
 
     src = ""
     open_on_start = True

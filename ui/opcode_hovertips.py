@@ -69,7 +69,7 @@ class OpcodeHoverTip:
         self._prev_index: Optional[str] = None
         
         # Visual highlighting for hovered cell
-        self.text.tag_configure("hover_cell", background="#ffe08a")
+        self.text.tag_configure("hover_cell", background="#0a2516", foreground="#4ed05d")
 
         # Bind event handlers (preserve existing bindings with add=True)
         self._bind_ids = {
@@ -77,9 +77,6 @@ class OpcodeHoverTip:
             "leave": text.bind("<Leave>", self._on_leave, add=True),
             "press": text.bind("<ButtonPress>", self._on_leave, add=True),
         }
-        # text.bind("<Motion>", self._on_motion, add=True)
-        # text.bind("<Leave>", self._on_leave, add=True)
-        # text.bind("<ButtonPress>", self._on_leave, add=True)
 
     def _on_motion(self, e: tk.Event) -> None:
         """
@@ -110,6 +107,7 @@ class OpcodeHoverTip:
         if self._prev_index:
             self.text.tag_remove("hover_cell", self._prev_index, f"{self._prev_index}+1c")
         self.text.tag_add("hover_cell", idx, f"{idx}+1c")
+        self.text.tag_raise("hover_cell")
         self._prev_index = idx
 
         # Cancel any pending tooltip display
@@ -201,15 +199,16 @@ class OpcodeHoverTip:
         # Create new tooltip window
         tip = tk.Toplevel(self.text)
         tip.overrideredirect(True)  # Remove window decorations
-        tip.attributes("-alpha", 0.98)  # Slight transparency
+        tip.attributes("-alpha", 0.90)  # Slight transparency
 
         lbl = tk.Label(
             tip,
             text=text,
             font=self._fixed_font,
-            background="#ffffe0",
-            relief=tk.SOLID,
-            borderwidth=1,
+            background="#0a2516",
+            foreground="#4ed05d",
+            relief=tk.RIDGE,
+            borderwidth=2,
             justify="left"
         )
         lbl.pack(ipadx=6, ipady=4)
