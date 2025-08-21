@@ -16,10 +16,10 @@ class Stack:
     Follows Befunge conventions where attempting to pop from
     an empty stack returns 0 rather than raising an Exception.
 
-    Stores integer values and supports all standard stack
-    operations plus specialized methods for common Befunge
-    patterns such as swapping the top two elements and popping
-    multiple elements safely.
+    The stack stores signed 32-bit integers and supports all standard
+    stack operations plus specialized methods for common Befunge patterns
+    such as swapping the top two elements and safely popping multiple
+    elements on an empty stack.
 
     Attributes:
         `items`: Internal list storing stack elements (top is idx -1)
@@ -66,6 +66,10 @@ class Stack:
             >>> list(stack)
             [1, 2]
             ```
+
+        GUI Integration:
+            Used by visualization components to display the complete
+            stack without affecting program execution.
         """
         return iter(self.items)
     
@@ -98,6 +102,9 @@ class Stack:
         Returns:
             The value at the specified index
 
+        Raises:
+            `IndexError`: If index is out of range
+
         Example:
             ```
             >>> stack = Stack()
@@ -108,6 +115,10 @@ class Stack:
             >>> stack[-1]
             20
             ```
+
+        GUI Usage:
+            Used by visualization components to display individual
+            stack elements with position information.
         """
         return self.items[idx]
     
@@ -144,6 +155,10 @@ class Stack:
             >>> stack.size()
             1
             ```
+
+        Usage:
+            Used throughout the interpreter for stack size checking
+            and in GUI components for status display.
         """
         return len(self.items)
     

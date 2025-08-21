@@ -12,6 +12,10 @@ def trunc_div(a: int, b: int) -> int:
     Returns:
         The quotient truncated towards zero, or 0 if dividing by zero
 
+    Error Handling:
+        Division by zero returns 0 as specified by Befunge-93, rather
+        than raising an exception.
+
     Example:
         ```
         >>> trunc_div(7, 3)
@@ -21,6 +25,10 @@ def trunc_div(a: int, b: int) -> int:
         >>> trunc_div(5, 0)
         0
         ```
+
+    Algorithm:
+        Uses Python's true division followed by int() conversion, in
+        order to truncate toward zero.
     """
     if b == 0:
         return 0    # Befunge-93 defines as returning zero

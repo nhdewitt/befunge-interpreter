@@ -5,15 +5,11 @@ Implements the main interpreter for the Befunge-93 programming language. Befunge
 stack-based, 2D grid programming language where the IP moves through a grid of
 characters, executing operations and manipulating a stack.
 
-Handles all operations including arithmetic, stack manipulation, flow control,
-I/O operations, and self-modifying code capabilities.
-
-Key features:
-    - Complete Befunge-93 opcode support (https://catseye.tc/view/Befunge-93/doc/Befunge-93.markdown)
-    - String mode for literal character input
-    - Self-modifying code (get/put ops)
-    - Asynchronous input handling for GUI integration
-    - Step-by-step execution for debugging and visualization
+Provides Befunge-93 compliance with modern enhancements:
+- Extended 32-bit value storage for self-modifying code
+- Asynchronous input handling for GUI integration
+- Step-by-step execution for debugging and visualization
+- Complete opcode support
 """
 
 from __future__ import annotations
@@ -31,7 +27,7 @@ from .types import StepStatus, ViewState, WaitTypes
 
 class Interpreter:
     """
-    Main Befunge-93 interpreter implementing complete language semantics.
+    Main Befunge-93 interpreter
 
     Manages program execution, maintains the execution stack, handles I/O
     operations, and provides step-by-step execution capabilities suitable
@@ -43,17 +39,27 @@ class Interpreter:
     - Self-modifying code via `p` (put) and `g` (get) operations
     - Asynchronous input handling for GUI integration
     - Program state inspection and reset capabilities
+    - Grid revision tracking
+
+    Extended Storage System:
+        Values outside 0-255 are stored in a shadow dictionary (`extended_storage`)
+        while the main grid displays the low byte for visual reference. This allows
+        full 32-bit integer support when executing a put or get op.
 
     Attributes:
         `stack`: The execution stack for intermediate values
         `ip`: The IP managing position and movement
-        `output`: Accumulated output from `.` and `,` operations
-        `halted`: Whether the program has terminated
+        `output_stream`: StringIO buffer for program output
+        `halted`: Whether the program has terminated (`@` opcode)
+        `extended_storage`: Dict mapping `(x,y)` -> full 32-bit values for self-modification
         `_ops`: Dictionary mapping opcodes to their implementation functions
     """
     def __init__(self, code: Union[str, List[List[str]]]):
         """
         Initialize the interpreter with Befunge source code.
+
+        Creates a new interpreter instance with the provided source doe, initializes the
+        opcode dispatch table, and sets up extended storage.
 
         Args:
             `code`: Either a string containing Befunge source (with newlines),
@@ -64,12 +70,16 @@ class Interpreter:
         self.load(code)
         self.output_stream = StringIO()
 
-        # Shadow storage for put/get values > 255
-        self.extended_storage = {}  # Maps (x,y) -> full 32-bit value
+        # Shadow storage for put/get values outside 0-255
+        # Maps (x,y) to full 32-bit value
+        self.extended_storage: Dict[tuple[int, int], int] = {}
 
     @property
     def output(self) -> str:
-        """Get the complete output as a string."""
+        """Get the complete output as a string.
+        
+        Returns all text written by `.` and `,` ops since the last reset or load
+        """
         return self.output_stream.getvalue()
 
     def load(self, code: Union[str, List[List[str]]]) -> None:
@@ -86,6 +96,7 @@ class Interpreter:
         self.ip: InstructionPointer = InstructionPointer(code)
         self.output_stream = StringIO()
         self.halted = False
+        self.extended_storage.clear()
 
         # Track grid revision - only need to redraw on "p" or load()
         self.grid_rev = (getattr(self, "grid_rev", -1) + 1)
@@ -96,12 +107,15 @@ class Interpreter:
 
         Reloads the current program grid, resetting the instruction pointer,
         stack, output, and all execution state while preserving any
-        modifications made to the grid by `p` operations.
+        modifications made to the grid by `p` operations. Revision is
+        incremented to trigger GUI updates.
         """
         self.stack = Stack()
         self.ip = InstructionPointer(self.ip.grid)
         self.output_stream = StringIO()
         self.halted = False
+        self.extended_storage.clear()
+        self.grid_rev += 1
     
     def view(self) -> ViewState:
         """
@@ -130,6 +144,9 @@ class Interpreter:
         `~` (character input) operations. The value is buffered until the
         next `step()` call processes it.
 
+        This method should only be called when the interpreter is in the
+        `AWAITING_INPUT` state after encountering a corresponding opcode.
+
         Args:
             `value`: Integer value to provide (for `~`, should be ASCII)
         """
@@ -144,6 +161,15 @@ class Interpreter:
         corresponding operation, and advances the IP. Handles special
         cases like string mode, input waiting, and program termination.
 
+        Follows this sequence:
+        1. Process any pending input from previous step
+        2. Read character at current IP position
+        3. Handle program termination (`@`)
+        4. Handle string mode toggle (`"`)
+        5. Execute opcode or push literal value
+        6. Move IP to next position
+        7. Return execution status
+
         Returns:
             StepStatus indicating current interpreter state:
             - `RUNNING`: Normal execution, ready for next step
@@ -152,7 +178,8 @@ class Interpreter:
 
         Note:
             In string mode, most characters are pushed onto the stack as
-            ASCII values rather than executed as opcodes.
+            ASCII values rather than executed as opcodes. The `"` character
+            always toggles string mode regardless of current mode.
         """
         # Process pending input from previous step
         if self.ip.pending_input is not None and self.ip.waiting_for is None:
@@ -208,7 +235,7 @@ class Interpreter:
         the second-popped value is the left operand.
 
         Args:
-            `fn`: Function to apply (takes two ints, returns int)
+            `fn`: Function to apply (takes two `ints`, returns `int`)
         """
         a, b = self._pop_two_ab()
         self.stack.push(fn(a, b))
@@ -238,6 +265,14 @@ class Interpreter:
         Pops `y`, `x`, and `v` from stack, then sets `grid[y][x] = chr(v)`.
         Coordinates wrap around grid boundaries. This allows Befunge
         programs to modify their own source code during execution.
+
+        Extended Storage Behavior:
+        - Values 0-255: Stored directly in grid as characters
+        - Values outside 0-255: Stored in `extended_storage` dictionary with
+          grid showing low byte (`v % 256`) for visual reference
+        - Negative values: Stored in extended storage, grid shows `abs(v) % 256`
+
+        Stack Effect: `<v> <x> <y>` -> `(empty)`
         """
         y = self._pop_or_zero()
         x = self._pop_or_zero()
@@ -262,6 +297,9 @@ class Interpreter:
                 # Clear extended storage
                 if (x, y) in self.extended_storage:
                     del self.extended_storage[(x, y)]
+        
+        # Trigger GUI update for grid modifications
+        self.grid_rev += 1
 
     def _get(self) -> None:
         """
@@ -270,6 +308,13 @@ class Interpreter:
         Pops `y` and `x` coordinates from stack, then pushes the
         ASCII value of the character at `grid[y][x]`. Coordinates
         wrap around grid boundaries.
+
+        Extended Storage Behavior:
+        - If extended storage exists at `(x,y)`, returns the full value
+        - Otherwise, returns ASCII value of character in grid
+        - OOB coordinates return `0`
+
+        Stack Effect: `<x> <y>` -> `<value>`
         """
         y = self._pop_or_zero()
         x = self._pop_or_zero()
@@ -288,6 +333,7 @@ class Interpreter:
                 self.stack.push(ord(self.ip.grid[y][x]))
         
         else:
+            # Empty grid value returns 0
             self.stack.push(0)
 
     def _await(self, kind: WaitTypes) -> StepStatus:
@@ -295,7 +341,8 @@ class Interpreter:
         Set up the interpreter to wait for input of the specified type.
 
         Args:
-            `kind`: Either `int` for `&` opcode or `char` for `~` opcode
+            `kind`: Either `WaitTypes.INT` for `&` opcode or
+                    `WaitTypes.CHAR` for `~`
 
         Returns:
             `StepStatus.AWAITING_INPUT` to signal GUI to request input
@@ -337,6 +384,8 @@ class Interpreter:
 
         Pushes a copy of the top stack element. If the stack is empty, pushes 0
         following Befunge semantics.
+
+        Stack Effect: `<value>` -> `<value> <value>` or `(empty)` -> `0`
         """
         self.stack.push(0 if self.stack.size() == 0 else self.stack.peek())
 
@@ -346,6 +395,11 @@ class Interpreter:
 
         Swaps the top two elements of the stack. Handles cases where the stack has
         fewer than two elements by treating missing values as 0.
+
+        Stack Effects:
+        - `<a> <b>` -> `<b> <a>`
+        - `<a>` -> `0 <a>`
+        - `(empty)` -> `0`
         """
         n = self.stack.size()
         if n >= 2:
@@ -375,6 +429,8 @@ class Interpreter:
 
         Pops a value from the stack and appends it to the output
         string as a decimal integer.
+
+        Output: Decimal representation of the value
         """
         self.output_stream.write(str(self._pop_or_zero()))
 
@@ -384,6 +440,8 @@ class Interpreter:
 
         Pops a value from the stack, converts it to a character
         (modulo 256 for ASCII range), and appends to output.
+
+        Output: Character with ASCII value (`value % 256`)
         """
         self.output_stream.write(chr(self._pop_or_zero() % 256))
 
