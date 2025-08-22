@@ -1,61 +1,61 @@
-def trunc_div(a: int, b: int) -> int:
-    """
-    Perform truncating integer division.
+"""Arithmetic helpers matching Befunge-93 / C-like semantics."""
 
-    Matches C-style truncation towards zero rather than Python's
-    floor division.
+def trunc_div(a: int, b: int) -> int:
+    """Truncating integer division (toward zero).
+
+    Matches C semantics and Befunge-93 rules (division by zero yields 0).
 
     Args:
-        `a`: Dividend (numerator)
-        `b`: Divisor (denominator)
-    
+      a: Dividend (numerator).
+      b: Divisor (denominator).
+
     Returns:
-        The quotient truncated towards zero, or 0 if dividing by zero
+      The quotient truncated toward zero, or 0 if dividing by zero.
 
-    Error Handling:
-        Division by zero returns 0 as specified by Befunge-93, rather
-        than raising an exception.
-
-    Example:
-        ```
-        >>> trunc_div(7, 3)
-        2
-        >>> trunc_div(-7, 3)
-        -2
-        >>> trunc_div(5, 0)
-        0
-        ```
-
-    Algorithm:
-        Uses Python's true division followed by int() conversion, in
-        order to truncate toward zero.
+    Examples:
+      >>> trunc_div(7, 3)
+      2
+      >>> trunc_div(-7, 3)
+      -2
+      >>> trunc_div(7, -3)
+      -2
+      >>> trunc_div(-7, -3)
+      2
+      >>> trunc_div(5, 0)
+      0
     """
     if b == 0:
-        return 0    # Befunge-93 defines as returning zero
-    return int(a / b)
+        return 0    # Befunge-93: division by zero -> 0
+    # Do it purely with integers to avoid float rounding on huge values
+    same_sign = (a >= 0) == (b >= 0)
+    q = (abs(a) // abs(b))
+    return q if same_sign else -q
 
 def c_mod(a: int, b: int) -> int:
-    """
-    Perform modulo operation with C-style semantics for negative numbers.
+    """Modulo with C semantics (remainder has the same sign as the dividend).
+
+    Befunge-93 specifies modulo-by-zero returns 0.
 
     Args:
-        `a`: Dividend
-        `b`: Divisor
+      a: Dividend.
+      b: Divisor.
 
     Returns:
-        The remainder following C-style modulo rules, or 0 if modulo by zero
+      The remainder using truncating division (toward zero), or 0 if b == 0.
 
-    Example:
-        ```
-        >>> c_mod(7, 3)
-        1
-        >>> c_mod(-7, 3)
-        -1
-        >>> c_mod(5, 0)
-        0
-        ```
+    Examples:
+      >>> c_mod(7, 3)
+      1
+      >>> c_mod(-7, 3)
+      -1
+      >>> c_mod(7, -3)
+      1
+      >>> c_mod(-7, -3)
+      -1
+      >>> c_mod(5, 0)
+      0
     """
     if b == 0:
-        return 0    # Befunge-93 defines as returning zero
+        return 0    # Befunge-93: modulo by zero -> 0
     q = trunc_div(a, b)
     return a - q * b

@@ -1,129 +1,124 @@
+"""Befunge Instruction Pointer.
+
+Implements the instruction pointer (IP) for a Befunge-93 interpreter.
+The IP tracks its position and direction on a 2D playfield, supports
+wraparound movement, and maintains execution state flags.
+
+The playfield is at least 80×25 as per Befunge-93. Programs smaller
+than this are padded on the right and bottom with spaces.
 """
-Befunge Instruction Pointer
 
-Implements the IP for a Befunge interpreter. The IP maintains the current
-position and direction within the 2D grid, handles movement with wraparound,
-and manages execution state.
-
-Operates on a minimum 80x25 grid as per Befunge-93 specs, with automatic
-padding for smaller programs and support for larger programs.
-"""
-
-from typing import Sequence, Optional, Tuple, Union
+from typing import Sequence, Optional, Tuple, Union, Final
 
 from .direction import Direction
 from .types import WaitTypes
 
-MIN_WIDTH   = 80
-MIN_HEIGHT  = 25
+MIN_WIDTH: Final[int]   = 80
+"""Minimum playfield width (columns)."""
+
+MIN_HEIGHT: Final[int]  = 25
+"""Minimum playfield height (rows)."""
 
 class InstructionPointer:
-    """
-    Manages the IP for program execution.
+    """Manage the instruction pointer during program execution.
 
-    Grid Management:
-        Programs are automatically padded to meet minimum Befunge-93 dimensions
-        while preserving original program size information for bounds checking
-        and visualization.
+    Grid management:
+      Programs are padded to the 80×25 minimum while preserving the
+      original dimensions for bounds checks and visualization.
 
-    Execution State:
-        The IP maintains several execution flags including string mode, skip mode,
-        and I/O state.
+    Execution state:
+      The IP tracks string mode, bridge/skip, random-direction metadata,
+      and simple I/O wait state for GUI integration.
 
-    Attributes
-        `grid`: 2D list representing the Befunge program code
-        `width`: Width of the program grid (min. 80 chars)
-        `height`: Height of the program grid (min. 25 lines)
-        `orig_width`: Original program width before padding
-        `orid_height`: Original program height before padding
-        `x`: Current x-coordinate (column) of the IP
-        `y`: Current y-coordinate (row) of the IP
-        `direction`: Current movement direction of the IP
-        `skip`: Whether or not the next move should skip a cell
-        `string`: Whether or not the IP is in string mode
-        `last_was_random`: Whether the last direction change was random
-        `waiting_for`: Type of input expected (`WaitTypes` or `None`)
-        `pending_input`: Input value waiting to be processed
+    Attributes:
+      grid: 2D list of characters representing the program.
+      width: Padded grid width (≥ 80).
+      height: Padded grid height (≥ 25).
+      orig_width: Original program width before padding.
+      orig_height: Original program height before padding.
+      x: Current column (0-based).
+      y: Current row (0-based).
+      direction: Current movement direction.
+      skip: Whether the next move skips one cell (set by '#').
+      string: Whether the IP is in string mode.
+      last_was_random: True if the last direction change came from '?'.
+      waiting_for: Expected input type, if any.
+      pending_input: Buffered input value awaiting consumption.
     """
     def __init__(self, code: Union[str, Sequence[Sequence[str]]]) -> None:
-        """
-        Initialize the IP with Befunge source code.
+        """Initialize the IP with Befunge source code.
 
-        Converts the input code to a standardized 2D grid format with
-        minimum dimensions of 80x25 (standard Befunge-93 playfield size).
-        Empty areas are filled with spaces, and lines are padded for
-        uniform width.
+        Converts input into a uniform 2D grid and pads to the standard
+        80×25 playfield. Lines are right-padded with spaces; missing lines
+        are appended as space-only rows.
 
         Args:
-            `code`: Either a string containing Befunge source code with
-                    newlines, or a 2D sequence of characters representing
-                    the program grid
+          code: Befunge source as a newline-separated string or a 2D
+            sequence of characters.
+
         """
-        # Standardize input format
         if isinstance(code, str):
             lines = code.splitlines()
         else:
             lines = ["".join(row) for row in code]
 
-        # Store original dimensions before padding for bounds checking
+        # Record original (pre-padding) dimensions for bounds/visualization.
         self.orig_width = max((len(l) for l in lines), default=0)
         self.orig_height = len(lines)
 
-        # Calculate padded dimensions to meet minimums
+        # Pad to Befunge-93 minimums (80x25)
         W = max(MIN_WIDTH, self.orig_width)
         H = max(MIN_HEIGHT, self.orig_height)
 
-        # Create uniform grid with right and bottom padding
+        # Create uniform grid with right and bottom padding.
         self.grid: list[list[str]] = [list(l.ljust(W, ' ')) for l in lines]
         while len(self.grid) < H:
             self.grid.append([' '] * W)
         self.width, self.height = W, H
 
-        # Initialize IP at origin (0, 0) facing right
         self.x = 0
         self.y = 0
         self.direction: Direction = Direction.RIGHT
 
-        # Execution state flags
-        self.skip = False                   # Bridge command flag
+        # Execution state flags.
+        self.skip = False                   # Bridge ('#') flag
         self.string = False                 # String mode flag
-        self.last_was_random = False        # Random direction tracking
+        self.last_was_random = False        # True if last direction change was '?'
 
-        # I/O synchronization state for GUI integration
+        # I/O wait state for GUI integration.
         self.waiting_for: Optional[WaitTypes] = None    # Expected input type
         self.pending_input: Optional[int] = None        # Buffered input value
     
     def change_direction(self, d: Direction, *, from_random: bool = False) -> None:
-        """
-        Update the IP's direction based on a direction command.
+        """Change the IP's movement direction.
 
         Args:
-            `d`: A `Direction` enum value
-            `from_random`: Whether this direction change came from a `?` opcode
+          d: New direction.
+          from_random: True if the change came from the '?' opcode.
+
         """
         self.direction = d
         self.last_was_random = from_random
     
     def move(self) -> Tuple[int, int]:
-        """
-        Move the IP one step in its current direction.
+        """Advance the IP one step with wraparound.
 
-        Advances the IP position using the current direction's delta values, with
-        wraparound at grid boundaries. If the `skip` flag is set (by `#`), moves an
-        additional step to skip over the next cell, then clears the flag.
+        Applies the current direction deltas. If `skip` is set (from '#'),
+        an extra cell is skipped and the flag is cleared. Movement wraps
+        around grid boundaries.
 
         Returns:
-            Tuple of `(x, y)` coordinates after movement
+          The new `(x, y)` coordinates after movement.
+
         """
         dx, dy = self.direction.dx, self.direction.dy
 
-        # Handle bridge command ('#')
+        # If `skip` is set (from '#'), step once extra and clear it.
         if self.skip:
             self.x = (self.x + dx) % self.width
             self.y = (self.y + dy) % self.height
             self.skip = False
 
-        # Normal movement with wraparound
         self.x = (self.x + dx) % self.width
         self.y = (self.y + dy) % self.height
 

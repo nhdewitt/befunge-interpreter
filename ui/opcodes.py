@@ -1,18 +1,17 @@
-"""
-Befunge Opcode Documentation and Tooltip Formatting
+"""Befunge opcode documentation and tooltip formatting.
 
-This module contains documentation for all Befunge-93 opcodes and provides formatting utilities
-for creating consistent, aligned tooltip displays. The documentation follows the official Befunge-93
-specification and includes stack effects and behavioral descriptions for each operation.
+Contains documentation for all Befunge-93 opcodes and utilities to render
+aligned, monospaced tooltip tables. The docs include stack effects and
+behavioral descriptions derived from the Befunge-93 spec.
 
-The tooltip formatting system ensures consistent column alignment and appearance across all opcode
-help displays, supporting the predefined opcodes and dynamically generated content for digits.
+The formatter keeps column widths consistent across predefined opcodes and
+dynamically generated entries (e.g., digits).
 """
 
 from typing import Dict, Tuple, Optional
 
-# From Befunge-93 Documentation (https://catseye.tc/view/Befunge-93/doc/Befunge-93.markdown)
 # Format: opcode -> (description, initial_stack, result_stack)
+# Reference: https://catseye.tc/view/Befunge-93/doc/Befunge-93.markdown
 OPCODES: Dict[str, Tuple[str, str, str]] = {
     # Artithmetic operations
     '+': ("(add)",              "<value1> <value2>",    "<value1 + value2>"),
@@ -42,7 +41,7 @@ OPCODES: Dict[str, Tuple[str, str, str]] = {
     '\\': ("(swap)",            "<value1> <value2>",    "<value2> <value1>"),
     '$': ("(pop)",              "<value>",              "pops <value> but does nothing"),
 
-    # Output operations
+    # Output
     '.': ("(output int)",       "<value>",              "outputs <value> as integer"),
     ',': ("(output char)",      "<value>",              "outputs <value> as ASCII"),
 
@@ -51,7 +50,7 @@ OPCODES: Dict[str, Tuple[str, str, str]] = {
     'g': ("(get)",              "<x> <y>",              "value at (x,y)"),
     'p': ("(put)",              "<value> <x> <y>",      "puts <value> at (x,y)"),
 
-    # Input operations
+    # Input
     '&': ("(input int)",        "",                     "<value user entered>"),
     '~': ("(input char)",       "",                     "<character user entered>"),
 
@@ -64,132 +63,106 @@ for d in "0123456789":
     OPCODES[d] = (f"(push {d})", "", f"{d}")
 
 # Column headers
-HEADERS = ("COMMAND", "INITIAL STACK (bot->top)", "RESULT (STACK)")
+HEADERS: Tuple[str, str, str] = ("COMMAND", "INITIAL STACK (bot->top)", "RESULT (STACK)")
 
 def _first_col(cmd: str, meaning: str) -> str:
-    """
-    Combine the command character with its description for the first column.
-
-    Creates the first column content by merging the opcode character with its
-    descriptive text, handling empty descriptions gracefully.
+    """Combine the opcode glyph with its short description.
 
     Args:
-        `cmd`: The opcode glyph
-        `meaning`: The descriptive text
+      cmd: The opcode character.
+      meaning: The descriptive text (may be empty).
 
     Returns:
-        Formatted string for the first column with trailing whitespace removed
+      The first-column content with trailing whitespace removed.
 
-    Example:
-        ```
-        >>> _first_col('+', '(add)')
-        '+ (add)'
-        >>> _first_col('5', '(push 5)')
-        '5 (push 5)'
-        ```
+    Examples:
+      >>> _first_col('+', '(add)')
+      '+ (add)'
+      >>> _first_col('5', '(push 5)')
+      '5 (push 5)'
+      >>> _first_col('>', '')
+      '>'
     """
     return f"{cmd} {meaning}".rstrip()
 
-def compute_widths(rows: Dict[str, Tuple[str, str, str]],
-                   headers: Tuple[str, str, str] = HEADERS) -> Tuple[int, int, int]:
-    """
-    Calculate optimal column widths for aligned tooltip display.
 
-    Determines the max width needed for each column, which will either be the header
-    of the column or the column data itself.
+def compute_widths(
+        rows: Dict[str, Tuple[str, str, str]],
+        headers: Tuple[str, str, str] = HEADERS
+    ) -> Tuple[int, int, int]:
+    """Calculate optimal column widths for aligned tooltip display.
+
+    The width of each column is the max of the header and all row values.
 
     Args:
-        `rows`: Dict of opcode documentation
-        `headers`: Column header strings for width calculation
+      rows: Dict of opcode docs.
+      headers: Column headers used for width calculation.
 
     Returns:
-        Tuple of `(width1, width2, width3)` for the three tooltip columns
-
+      A tuple (w0, w1, w2) for the three tooltip columns.
     """
     w0 = max(len(headers[0]), *(len(_first_col(cmd, v[0])) for cmd, v in rows.items()))
     w1 = max(len(headers[1]), *(len(v[1]) for v in rows.values()))
     w2 = max(len(headers[2]), *(len(v[2]) for v in rows.values()))
-
     return (w0, w1, w2)
 
+
 def _pad(s: str, w: int) -> str:
-    """
-    Add whitespace padding to achieve the specified width.
+    """Pad a string with spaces to reach width w (no-op if already longer)."""
+    return s if len(s) >= w else s + " " * (w - len(s))
+
+def format_tooltip_for_opcode(
+        cmd: str,
+        rows: Dict[str, Tuple[str, str, str]] = OPCODES,
+        widths: Optional[Tuple[int, int, int]] = None,
+        headers: Tuple[str, str, str] = HEADERS,
+        gap: str = " "
+    ) -> str:
+    """Format a tooltip table for a Befunge opcode.
+
+    Produces a 3-column, monospaced table with headers, a separator, and a row
+    describing the opcode’s meaning and stack effect.
 
     Args:
-        `s`: String to pad
-        `w`: Target width
+      cmd: Opcode character to format documentation for.
+      rows: Opcode documentation mapping.
+      widths: Optional precomputed column widths.
+      headers: Column headers.
+      gap: String used to separate columns.
 
     Returns:
-        String padded with spaces to reach the target width
+      A multi-line string: header, underline, and content row.
+
+    Examples:
+      >>> print(format_tooltip_for_opcode('+').splitlines()[0])
+      COMMAND INITIAL STACK (bot->top) RESULT (STACK)
     """
-    return s + " " * (w - len(s))
-
-def format_tooltip_for_opcode(cmd: str,
-                              rows: Dict[str, Tuple[str, str, str]] = OPCODES,
-                              widths: Optional[Tuple[int, int, int]] = None,
-                              headers: Tuple[str, str, str] = HEADERS,
-                              gap: str = " ") -> str:
-    """
-    Format a tooltip for a given Befunge opcode.
-
-    Creates a formatted, aligned table showing the opcode's function, initial
-    and resulting stack. Handles special cases for digits, spaces, and
-    unknown characters gracefully.
-
-    Args:
-        `cmd`: The opcode character to format documentation for
-        `rows`: Dict of opcode documentation
-        `widths`: Pre-calculated column widths
-        `headers`: Column header strings
-        `gap`: String used to separate columns
-
-    Returns:
-        Multi-line string containing formatted tooltip with headers,
-        separator line, and opcode information
-
-    Example:
-        ```
-        >>> format_tooltip_for_opcode('+')
-        'COMMAND          INITIAL STACK (bot->top)    RESULT (STACK)
-         -------          ------------------------    -----------------
-         + (add)          <value1> <value2>           <value1 + value2>'
-        ```
-
-    Special Handling:
-        - Digits: Shows "`(push n)`" behavior with the digit value
-        - Spaces: Shows `(noop)` with no effect
-        - Unknown chars: Shows empty documentation
-    """
-    # Look up opcode documentation with fallbacks for special cases
+    # Look up opcode documentation with fallbacks for special cases.
     if cmd in rows:
         op, stack, result = rows[cmd]
     elif cmd.isdigit():
-        # Digits push their numeric value
         op, stack, result = (f"(push {cmd})", "", cmd)
     elif cmd == " ":
-        # Spaces are no-ops
-        op, stack, result = ("(noop)", "", "no effect")
+        op, stack, result = ("(no-op)", "", "no effect")
     else:
-        # Unknown characters get empty documentation
         op, stack, result = ("", "", "")
     
-    # Prepare content for formatting
+    # Build first column and choose widths.
     c0 = _first_col(cmd, op)
     cells = (c0, stack, result)
 
     # Calculate column widths
     if widths is None:
         widths = compute_widths(rows, headers)
-    w0, w1, w2 = widths
 
-    # Expand column widths if current content is wider than pre-calculated
-    e0 = max(w0, len(headers[0]), len(op))
+    # Expand widths if this row exceeds the precomputed sizes.
+    w0, w1, w2 = widths
+    e0 = max(w0, len(headers[0]), len(c0))
     e1 = max(w1, len(headers[1]), len(stack))
     e2 = max(w2, len(headers[2]), len(result))
     e_widths: Tuple[int, int, int] = (e0, e1, e2)
     
-    # Format the three-line tooltip: header, separator, content
+    # Render header, underline, and row.
     header = gap.join(_pad(h, w) for h, w in zip(headers, e_widths))
     underline = gap.join("-" * w for w in e_widths)
     row = gap.join(_pad(s, w) for s, w in zip(cells, e_widths))

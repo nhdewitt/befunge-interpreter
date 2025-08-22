@@ -1,20 +1,17 @@
-"""
-Befunge Interpreter GUI Application
+"""Befunge interpreter GUI application (Tkinter).
 
-Implements the main GUI application for the Befunge interpreter using Tkinter.
 Provides a development environment for debugging and executing Befunge programs
-with real-time visualization, interactive debugging, and comprehensive opcode
-tooltips.
+with real-time visualization, interactive debugging, and opcode tooltips.
 
 Key features:
-    - Real-time code visualization with IP tracking and syntax highlighting
-    - Interactive debugging with breakpoints and step-by-step execution
-    - Separate output window with stack visualization and smart docking
-    - Comprehensive opcode tooltips with hover system
-    - Settings persistence per-file (speed, breakpoints)
-    - Asynchronous input handling for Befunge input operations
-    - Configurable execution speed and batch processing
-    - File management with validation and error handling
+  - Real-time code visualization with IP tracking and syntax highlighting.
+  - Interactive debugging with breakpoints and step-by-step execution.
+  - Separate output window with stack visualization and smart docking.
+  - Comprehensive opcode tooltips with hover system.
+  - Per-file settings persistence (speed, breakpoints).
+  - Asynchronous input handling for Befunge input operations.
+  - Configurable execution speed and batch processing.
+  - File management with validation and error handling.
 """
 
 import json
@@ -22,8 +19,7 @@ import os
 import tempfile
 from typing import Set, Tuple, Optional, Dict, Any
 import tkinter as tk
-from tkinter import ttk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 from core.interpreter import Interpreter
 from core.types import StepStatus, WaitTypes
@@ -31,188 +27,196 @@ from .opcode_hovertips import OpcodeHoverTip
 from .opcodes import OPCODES, format_tooltip_for_opcode, compute_widths
 from .format_stack import fmt_stack_item
 
-# Pre-compute column widths for consistent tooltip formatting
+# Pre-compute column widths for consistent tooltip formatting.
 COL_WIDTHS = compute_widths(OPCODES)
 
-# Cache tooltips that have already been generated
-TOOLTIP_CACHE = {}
+# Cache tooltips that have already been generated.
+TOOLTIP_CACHE: Dict[str, str] = {}
 
-# Settings file format version for backward compatibility
+# Settings file format version for backward compatibility.
 SETTINGS_VERSION = 2
 
-# Default settings applied to new files on close
+# Default settings applied to new files on close.
 DEFAULT_SETTINGS = {
-    "version":      SETTINGS_VERSION,
-    "delay_ms":         50,             # ms between execution steps
-    "steps_per_tick":   1,              # number of steps executed per timer tick
-    "breakpoints":      [],             # list of breakpoint coordinates
+    "version": SETTINGS_VERSION,
+    "delay_ms": 50,         # ms between execution steps
+    "steps_per_tick": 1,    # number of steps executed per timer tick
+    "breakpoints": [],      # list of breakpoint coordinates
 }
 
 def tooltip_formatter(ch: str) -> str:
-    """
-    Format tooltip text for a given character/opcode with caching.
+    """Return formatted tooltip text for a given character/opcode (cached).
 
     Args:
-        `ch`: Single character to format tooltip for
+      ch: Single character to format a tooltip for.
 
     Caching:
-        Tooltips are cached after first generation to improve hover responsiveness
-        during repeated mouse movements over the same characters.
+      Tooltips are cached after first generation to improve hover responsiveness
+      during repeated mouse movements over the same characters.
     """
     if ch not in TOOLTIP_CACHE:
         if ch.isdigit():
-            # Digits push their numeric value onto the stack
-            TOOLTIP_CACHE[ch] = format_tooltip_for_opcode(ch,
-                                            rows={ch: ("(push digit)", "", ch)},
-                                            widths=COL_WIDTHS)
+            # Digits push their numeric value onto the stack.
+            TOOLTIP_CACHE[ch] = format_tooltip_for_opcode(
+                ch,
+                rows={ch: ("(push digit)", "", ch)},
+                widths=COL_WIDTHS
+            )
         elif ch == " ":
-            # Spaces are no-ops
-            TOOLTIP_CACHE[ch] = format_tooltip_for_opcode(ch,
-                                            rows={ch: ("(no-op)", "", "(no effect)")},
-                                            widths=COL_WIDTHS)
+            # Spaces are no-ops.
+            TOOLTIP_CACHE[ch] = format_tooltip_for_opcode(
+                ch,
+                rows={ch: ("(no-op)", "", "(no effect)")},
+                widths=COL_WIDTHS
+            )
         else:
-            # Use main opcodes dict for all other characters
-            TOOLTIP_CACHE[ch] = format_tooltip_for_opcode(ch, rows=OPCODES, widths=COL_WIDTHS)
+            # Use main opcodes dict for all other characters.
+            TOOLTIP_CACHE[ch] = format_tooltip_for_opcode(
+                ch, rows=OPCODES, widths=COL_WIDTHS
+            )
 
     return TOOLTIP_CACHE[ch]
 
 class App(ttk.Frame):
-    """
-    Main GUI application for the Befunge interpreter.
+    """Main GUI application for the Befunge interpreter.
 
-    Window Management:
-        - Main editor window with syntax highlighting
-        - Detachable output window with docking
-        - Window state preservation
+    Window management:
+      - Main editor window with syntax highlighting.
+      - Detachable output window with docking.
+      - Window state preservation.
 
-    Execution Control:
-        - Variable speed execution (1-500ms delays)
-        - Batch processing (1-50 steps per tick)
-        - Breakpoint-aware execution with pause/resume
-        - Asynchronous input handling for user interaction
+    Execution control:
+      - Variable speed execution (1–500 ms delays).
+      - Batch processing (1–50 steps per tick).
+      - Breakpoint-aware execution with pause/resume.
+      - Asynchronous input handling for user interaction.
 
     Attributes:
-        `interp`: The Befunge interpreter instance
-        `speed_ms`: `IntVar` controlling delay between execution steps
-        `steps_per_tick`: `IntVar` controlling batch size for each timer tick
-        `breakpoints`: Set of `(x, y)` coordinates where execution should pause
-        `current_path`: Path to currently loaded file (None if unsaved)
-        `last_dir`: Last directory used for file operations
+      interp: The Befunge interpreter instance.
+      speed_ms: IntVar controlling delay between execution steps.
+      steps_per_tick: IntVar controlling batch size per timer tick.
+      breakpoints: Set of (x, y) coordinates where execution should pause.
+      current_path: Path to the currently loaded file (None if unsaved).
+      last_dir: Last directory used for file operations.
 
-    GUI Components:
-        `text`: Main `Text` widget displaying the Befunge grid
-        `status`: `Label` showing current interpreter state
-        `input_bar`: `Frame` containing input controls (hidden by default)
-        `_out_win`: Optional `Toplevel` window for program output
-        `_hover`: `OpcodeHoverTip` instance for interactive tooltips
+    GUI components:
+      text: Main Text widget displaying the Befunge grid.
+      status: Label showing current interpreter state.
+      input_bar: Frame containing input controls (hidden by default).
+      _out_win: Optional Toplevel window for program output.
+      _hover: OpcodeHoverTip instance for interactive tooltips.
 
-    Settings Management:
-        `_last_saved_settings`: Cached settings for change detection
-        `_settings_changed`: Flag indicating unsaved settings changes
-        `_suspend_setting_traces`: Flag to prevent recursive setting updates
+    Settings management:
+      _last_saved_settings: Cached settings for change detection.
+      _settings_changed: Flag indicating unsaved settings changes.
+      _suspend_setting_traces: Flag to prevent recursive setting updates.
     """
-    def __init__(self, master: tk.Misc, interp: Interpreter, *,
-                 open_on_start: bool = True, **kwargs):
-        """
-        Initialize the GUI application.
+    def __init__(
+            self,
+            master: tk.Misc,
+            interp: Interpreter,
+            *,
+            open_on_start: bool = True,
+            **kwargs
+        ) -> None:
+        """Initialize the GUI application.
 
         Args:
-            `master`: Parent Tkinter widget (usually root window)
-            `interp`: Befunge interpreter instance to control
-            `open_on_start`: Whether to show file open dialog on startup
-            `**kwargs`: Additional arguments passed to `ttk.Frame`
+          master: Parent Tkinter widget (usually the root window).
+          interp: Befunge interpreter instance to control.
+          open_on_start: Whether to show the file-open dialog on startup.
+          **kwargs: Additional ttk.Frame options.
 
-        Initialization Sequence:
-        1. Configure window close handler for graceful shutdown
-        2. Initialize application state and execution control
-        3. Set up output window management
-        4. Configure settings persistence system
-        5. Build GUI components and event handlers
-        6. Initialize tooltip and visualization systems
-        7. Perform initial rendering and optional file opening
+        Initialization sequence:
+          1. Configure window close handler for graceful shutdown.
+          2. Initialize application state and execution control.
+          3. Set up output window management.
+          4. Configure settings persistence.
+          5. Build GUI components and event handlers.
+          6. Initialize tooltip and visualization systems.
+          7. Perform initial rendering and optional file opening.
         """
         super().__init__(master, **kwargs)
 
-        # Configure window close handler
+        # Configure window close handler.
         root = self.winfo_toplevel()
         root.protocol("WM_DELETE_WINDOW", self._on_app_close)
 
-        # Core application state
+        # Core application state.
         self.interp = interp
-        self._after: Optional[str] = None       # Timer ID for execution loop
+        self._after: Optional[str] = None   # Timer ID for execution loop
         self._shown_output = False
 
-        # Output window components (created on demand)
+        # Output window components (created on demand).
         self._out_win: Optional[tk.Toplevel] = None
         self._out_txt: Optional[tk.Text] = None
-        self._out_len: int = 0                  # Track output length for incremental updates
+        self._out_len: int = 0  # Track output length for incremental updates
         self._out_autoscroll = tk.BooleanVar(value=True)
         self._stack_lb: Optional[tk.Listbox] = None
 
-        # Execution control settings
+        # Execution control settings.
         self.speed_ms = tk.IntVar(value=DEFAULT_SETTINGS["delay_ms"])
         self.steps_per_tick = tk.IntVar(value=DEFAULT_SETTINGS["steps_per_tick"])
         self.breakpoints: Set[Tuple[int, int]] = set()
 
-        # Display variables for rea-time settings feedback
+        # Display variables for real-time settings feedback.
         self._delay_text = tk.StringVar()
         self._steps_text = tk.StringVar()
 
-        # Settings persistence state for per-file configuration
+        # Settings persistence state for per-file configuration.
         self._last_saved_settings: Dict[str, Any] = {
-            "delay_ms":         int(self.speed_ms.get()),
-            "steps_per_tick":   int(self.steps_per_tick.get()),
-            "breakpoints":      [],     # updated after settings load
+            "delay_ms": int(self.speed_ms.get()),
+            "steps_per_tick": int(self.steps_per_tick.get()),
+            "breakpoints": [],  # updated after settings load
         }
         self._settings_changed = False
         self._suspend_setting_traces = False
 
-        # Monitor settings changes for auto-save
+        # Monitor settings changes for auto-save.
         self.speed_ms.trace_add("write", self._reschedule_if_running)
         self.steps_per_tick.trace_add("write", self._on_settings_change)
 
-        # File management state
+        # File management state.
         self.current_path: Optional[str] = None
         self.last_dir: Optional[str] = None
 
-        # Grid revision tracking for efficient GUI updates
+        # Grid revision tracking for efficient GUI updates.
         self._last_grid_rev: int = -1
 
-        # Output window docking system
+        # Output window docking system.
         self._dock_side: Optional[str] = None
         self._dock_gap: int = 12
         self._dock_bind_id: Optional[str] = None
 
-        # Visual state tracking
+        # Visual state tracking.
         self._last_ip_xy: Optional[Tuple[int, int]] = None
 
-        # Build and configure GUI components
+        # Build and configure GUI components.
         self._build()
         self._build_input_bar()
         self._bind()
 
-        # Initial setup
+        # Initial setup.
         if open_on_start:
             self.after_idle(self.open_file)
         self.after_idle(self.render)    # Display initial state
 
     def open_file(self) -> None:
-        """
-        Prompt user to select and open a Befunge source file.
+        """Prompt the user to select and open a Befunge source file.
 
-        Opens a file dialog defaulting to the ./src directory, loads the selected
-        file, and initializes the interpreter with the new code. Also loads any
-        associated settings from a sidecar file.
+        Opens a file dialog defaulting to ./src, loads the selected file, and
+        initializes the interpreter with the new code. Also loads any associated
+        settings from a sidecar file.
 
-        File Dialog Configuration:
-            - Initial directory: `./src` (creates it if it doesn't exist)
-            - Supported extensions: `.bf`, `.befunge`
-            - File validation before loading
+        File dialog configuration:
+          - Initial directory: ./src (created if missing).
+          - Supported extensions: .bf, .befunge.
+          - Basic file validation before loading.
 
-        Error Handling:
-            - File access errors: Shows error dialog with details
-            - Invalid file types: Warns user about supported formats
-            - Corrupted files: Fallback with user notification
+        Error handling:
+          - File access errors: error dialog with details.
+          - Invalid file types: warning about supported formats.
+          - Corrupted settings files: fallback to defaults.
         """
         try:
             os.makedirs("./src", exist_ok=True)
@@ -227,14 +231,12 @@ class App(ttk.Frame):
             parent=self.winfo_toplevel(),
             initialdir=initial_dir,
             title="Load Befunge file",
-            filetypes=[
-                ("Befunge (*.bf, *.befunge)", "*.bf *.befunge"),
-                ]
+            filetypes=[("Befunge (*.bf, *.befunge)", "*.bf *.befunge")]
         )
         if not path:
             return
         
-        # Save settings for current file before switching
+        # Save settings for current file before switching.
         self._save_sidecar_settings_if_changed()
 
         try:
@@ -253,24 +255,14 @@ class App(ttk.Frame):
         self.load_file(src, path)
         
     def load_file(self, src: str, path: Optional[str] = None) -> None:
-        """
-        Load Befunge source code into the interpreter and update GUI.
+        """Load Befunge source code into the interpreter and update the GUI.
 
-        Stops any running execution, loads the new source code, clears
-        output, and refreshes the display. Can be called programmatically
-        or from file operations.
+        Stops any running execution, loads the new source code, clears output, and
+        refreshes the display. Can be called programmatically or from file ops.
 
         Args:
-            `src`: Befunge source code as a string
-            `path`: Optional file path for title display and settings
-
-        Loading Sequence:
-            1. Stop any running execution timers
-            2. Reset interpreter state with new source code
-            3. Clear output window and execution history
-            4. Update file management state
-            5. Refresh all GUI components
-            6. Update window title and control states
+          src: Befunge source code as a string.
+          path: Optional file path for title display and settings.
         """
         self.stop()
         self.interp.load(src)
@@ -283,43 +275,39 @@ class App(ttk.Frame):
         self._set_title()
         self._update_run_buttons()
 
-    def _set_title(self):
-        """Update window title to show current filename."""
+    def _set_title(self) -> None:
+        """Update window title to show the current filename."""
         root = self.winfo_toplevel()
         name = os.path.basename(self.current_path) if self.current_path else "(untitled)"
         root.title(f"Befunge - {name}")
 
-    def open_output_window(self, clear: bool = True):
-        """
-        Open or focus the program output window.
+    def open_output_window(self, clear: bool = True) -> None:
+        """Open or focus the program output window.
 
-        Creates a new output window if none exists, or brings the existing
-        window to the side. The window shows program output and a live view
-        of the execution stack.
+        Creates a new output window if none exists, or brings the existing window
+        to the foreground. The window shows program output and a live view of the
+        execution stack.
 
         Args:
-            `clear`: Whether to clear existing output when opening
+          clear: Whether to clear existing output when opening.
 
-        Window Layout:
-            - Left pane (4:1 weight): Scrollable text area for program output
-            - Right pane (1:1 weight): Stack visualization (top down)
-            - Bottom bar: Controls for copy, save, clear, autoscroll
+        Window layout:
+          - Left pane (weight 4): scrollable text area for program output.
+          - Right pane (weight 1): stack visualization (top down).
+          - Bottom bar: controls for copy, save, clear, autoscroll.
 
-        Smart Docking:
-            - Chooses optimal position relative to main window
-            - Prefers right side, falls back to left or below based on screen space
-            - Follows main window movement with gap
-            - Preserves relative positioning across sessions
+        Smart docking:
+          - Chooses position relative to main window (right, left, below).
+          - Follows main window movement with a gap.
+          - Preserves relative positioning across sessions.
 
-        Output Management:
-            - Incremental updates for performance with large output
-            - Automatic scrolling with user control
-            - Output truncation (100k+ characters)
-            - Stack visualization
+        Output management:
+          - Incremental updates for performance with large output.
+          - Optional autoscroll.
+          - Output truncation (last 100k characters when very large).
         """
-        # Focus existing window if already open
+        # Focus existing window if already open.
         if self._out_win and self._out_win.winfo_exists():
-            # Show if minimized
             try:
                 if str(self._out_win.state()) == "iconic":
                     self._out_win.deiconify()
@@ -332,7 +320,7 @@ class App(ttk.Frame):
                 self._prefill_output_from_interpreter()
             return
         
-        # Create new output window
+        # Create new output window.
         win = tk.Toplevel(self)
 
         try:
@@ -351,11 +339,11 @@ class App(ttk.Frame):
         content = ttk.Frame(win)
         content.pack(fill="both", expand=True, padx=8, pady=(8, 0))
 
-        # Horizontal paned window for output text and stack view
+        # Horizontal paned window for output text and stack view.
         pw = ttk.Panedwindow(content, orient=tk.HORIZONTAL)
         pw.pack(fill="both", expand=True)
 
-        # Left pane: Program output text with scrollbar
+        # Left pane: Program output text with scrollbar.
         left = ttk.Frame(pw)
         txt = tk.Text(left, wrap=tk.WORD, font=("Consolas", 11), height=16)
         yscroll_out = ttk.Scrollbar(left, orient=tk.VERTICAL, command=txt.yview)
@@ -366,7 +354,7 @@ class App(ttk.Frame):
         txt.grid(row=0, column=0, sticky=tk.NSEW)
         yscroll_out.grid(row=0, column=1, sticky=tk.NS)
 
-        # Right pane: Stack visualization with scrollbar
+        # Right pane: Stack visualization with scrollbar.
         right = ttk.Frame(pw, width=160)
         ttk.Label(right, text="Stack").pack(anchor=tk.W, padx=4, pady=(0, 4))
         lb = tk.Listbox(right, font=("Consolas", 11), activestyle=tk.NONE)
@@ -376,22 +364,22 @@ class App(ttk.Frame):
         lb.pack(side=tk.LEFT, fill="both", expand=True, padx=(4, 0), pady=(0, 4))
         yscroll_stack.pack(side=tk.LEFT, fill="y", padx=(0, 4), pady=(0, 4))
 
-        pw.add(left, weight=4)      # Output gets majority of space
-        pw.add(right, weight=1)     # Stack gets smaller portion
+        pw.add(left, weight=4)  # Output gets majority of space.
+        pw.add(right, weight=1) # Stack gets smaller portion.
 
-        # Control bar at bottom
+        # Control bar at bottom.
         bar = ttk.Frame(win)
         bar.pack(fill="x", padx=8, pady=(6, 8))
 
         ttk.Checkbutton(bar, text="Autoscroll",
                         variable=self._out_autoscroll).pack(side=tk.LEFT)
 
-        def copy_all():
+        def copy_all() -> None:
             """Copy all program output to clipboard."""
             self.clipboard_clear()
             self.clipboard_append(self.interp.output)
         
-        def save_to_file():
+        def save_to_file() -> None:
             """Save program output to a text file."""
             base = "Untitled"
             if self.current_path:
@@ -399,33 +387,31 @@ class App(ttk.Frame):
             default_name = base + ".txt"
 
             path = filedialog.asksaveasfilename(
-                parent=win, title="Save output",
+                parent=win,
+                title="Save output",
                 initialdir=self.last_dir or (os.path.dirname(self.current_path) if self.current_path else "."),
                 initialfile=default_name,
                 defaultextension=".txt",
-                filetypes=[
-                    ("Text files (*.txt)", "*.txt"),
-                    ("All files (*.*)", "*.*")
-                    ],
+                filetypes=[("Text files (*.txt)", "*.txt"), ("All files (*.*)", "*.*")],
                 confirmoverwrite=True,
             )
             if path:
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(self.interp.output)
         
-        # Control buttons
+        # Control buttons.
         ttk.Button(bar, text="Copy", command=copy_all).pack(side=tk.LEFT, padx=(8,0))
         ttk.Button(bar, text="Save...", command=save_to_file).pack(side=tk.LEFT, padx=6)
         ttk.Button(bar, text="Clear", command=self._clear_output_text).pack(side=tk.LEFT, padx=6)
         ttk.Button(bar, text="Close", command=win.destroy).pack(side=tk.RIGHT)
 
-        # Store references for updates and state management
+        # Store references for updates and state management.
         self._out_win = win
         self._out_txt = txt
         self._stack_lb = lb
         self._out_len = 0
 
-        # Set up docking system
+        # Set up docking system.
         self._dock_side = self._choose_dock_side(win)
         self._place_docked(win)
         self._bind_follow_main(win)
@@ -436,7 +422,7 @@ class App(ttk.Frame):
         else:
             self._out_len = len(self.interp.output)
 
-        def on_close():
+        def on_close() -> None:
             """Clean up references and event handlers when window is closed."""
             self._out_win = None
             self._out_txt = None
@@ -452,39 +438,32 @@ class App(ttk.Frame):
 
         win.protocol("WM_DELETE_WINDOW", on_close)
 
-        # Initialize content with current state
+        # Initialize content with current state.
         if clear:
             self._clear_output_text()
         self._refresh_stack_view()
 
     def _choose_dock_side(self, win: tk.Toplevel) -> str:
-        """
-        Choose the optimal docking side for the output window.
+        """Choose the optimal docking side for the output window.
 
         Prefers right side, with fallbacks based on available space.
 
         Args:
-            `win`: The output window to position
+          win: The output window to position.
 
         Returns:
-            Docking side string: "right", "left", or "below"
-
-        Algorithm:
-            1. Check if right side has sufficient space
-            2. Fall back to left side
-            3. Use bottom position as last resort
-            4. Otherwise, will start on top of output window
+          "right", "left", or "below".
         """
         root = self.winfo_toplevel()
         root.update_idletasks()
         win.update_idletasks()
 
-        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        rx, ry = root.winfo_rootx(), root.winfo_rooty()
-        rw, rh = root.winfo_width(), root.winfo_height()
-        ww, wh = win.winfo_reqwidth(), win.winfo_reqheight()
+        sw = root.winfo_screenwidth()
+        rx = root.winfo_rootx()
+        rw = root.winfo_width()
+        ww = win.winfo_reqwidth()
 
-        # Prefer right, then left, then below
+        # Prefer right, then left, then below.
         if rx + rw + self._dock_gap + ww <= sw:
             return "right"
         if rx - self._dock_gap - ww >= 0:
@@ -492,17 +471,16 @@ class App(ttk.Frame):
         return "below"
     
     def _place_docked(self, win: tk.Toplevel) -> None:
-        """
-        Position the output window relative to the main window.
+        """Position the output window relative to the main window.
 
         Args:
-            `win`: The output window to position
+          win: The output window to position.
 
-        Positioning Logic:
-            - Right: Adjacent to right edge with gap
-            - Left: Adjacent to left edge with gap
-            - Below: Underneath main window with gap
-            - Boundary checking to keep window on screen
+        Positioning logic:
+          - Right: adjacent to right edge with a gap.
+          - Left: adjacent to left edge with a gap.
+          - Below: underneath the main window with a gap.
+          - Boundary checking keeps the window on-screen.
         """
         if not (win and win.winfo_exists()):
             return
@@ -524,7 +502,7 @@ class App(ttk.Frame):
         else:
             x, y = rx, ry + rh + gap
 
-        # Ensure window stays on screen
+        # Keep on screen.
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         x = max(0, min(x, sw - ww))
         y = max(0, min(y, sh - wh))
@@ -532,20 +510,13 @@ class App(ttk.Frame):
         win.geometry(f"+{x}+{y}")
 
     def _bind_follow_main(self, win: tk.Toplevel) -> None:
-        """
-        Set up window following system for output window.
+        """Make the output window follow the main window movement/resizing.
 
-        Binds event handlers to make the output window follow the main window's
-        movement and resizing. Maintains the relative positioning established
-        by the docking system.
+        Binds handlers so the docking position is maintained as the main window
+        moves/resizes.
 
         Args:
-            `win`: The output window to follow the main window
-
-        Event Handling:
-            - Listens for main window Configure events
-            - Recalculates and applies docking position
-            - Handles cleanup of previous event
+          win: The output window to reposition when the main window changes.
         """
         if self._dock_bind_id:
             try:
@@ -558,15 +529,15 @@ class App(ttk.Frame):
             if win.winfo_exists():
                 self._place_docked(win)
 
-        self._dock_bind_id = self.winfo_toplevel().bind("<Configure>", _on_cfg, add=True)
+        self._dock_bind_id = self.winfo_toplevel().bind(
+            "<Configure>", _on_cfg, add=True
+        )
 
     def _refresh_stack_view(self) -> None:
-        """
-        Update the stack visualization in the output window.
+        """Update the stack visualization in the output window.
 
-        Displays stack contents from top to bottom in the listbox, with
-        each item formatted to show both numeric value and ASCII character
-        representation when applicable.
+        Displays stack contents from top to bottom in the listbox, with each item
+        showing numeric value and ASCII character representation when applicable.
         """
         if not (self._out_win and self._stack_lb and self._out_win.winfo_exists()):
             return
@@ -574,7 +545,7 @@ class App(ttk.Frame):
         lb = self._stack_lb
         lb.delete(0, tk.END)
 
-        # Display stack from top to bottom
+        # Display stack from top to bottom.
         items = list(self.interp.stack)
         for v in reversed(items):
             lb.insert(tk.END, fmt_stack_item(v))
@@ -588,12 +559,10 @@ class App(ttk.Frame):
             self._out_txt.configure(state=tk.DISABLED)
 
     def _append_output_if_needed(self) -> None:
-        """
-        Append new output to the output window if it has grown.
+        """Append new output to the output window if the interpreter output grew.
 
-        Only appends new portion of interpreter output, avoiding full
-        refreshes for better performance. Updates stack view and handles
-        autoscrolling.
+        Appends only the new portion of output for performance. Also manages
+        autoscroll and trims very large widgets.
         """
         if not (self._out_win and self._out_txt and self._out_win.winfo_exists()):
             return
@@ -601,32 +570,33 @@ class App(ttk.Frame):
         out = self.interp.output
         out_len = len(out)
         if out_len == self._out_len:
-            # No new output - return
             return
         
         MAX_DISPLAY = 100_000
 
         if out_len > MAX_DISPLAY:
             if self._out_len == 0:
-                # First display - show truncation message
+                # First display: show truncation message, then last MAX_DISPLAY.
                 self._out_txt.configure(state=tk.NORMAL)
-                self._out_txt.insert(tk.END, f"[Output truncated - showing last {MAX_DISPLAY} chars]\n")
+                self._out_txt.insert(
+                    tk.END, f"[Output truncated - showing last {MAX_DISPLAY} chars]\n"
+                )
                 self._out_txt.insert(tk.END, out[-MAX_DISPLAY:])
                 self._out_txt.configure(state=tk.DISABLED)
             else:
-                # Just append new portion
+                # Append new portion.
                 new_chunk = out[self._out_len:]
                 self._out_txt.configure(state=tk.NORMAL)
 
-                # If text widget is getting too large, trim from beginning
+                # If text widget is getting too large, trim from beginning.
                 current_size = int(self._out_txt.index('end-1c').split('.')[0])
                 if current_size > 10_000:
-                    self._out_txt.delete('1.0', '100.0')    # Remove first 100 lines
+                    self._out_txt.delete('1.0', '100.0')    # Remove first 100 lines.
 
                 self._out_txt.insert(tk.END, new_chunk)
                 self._out_txt.configure(state=tk.DISABLED)
         else:
-            # Normal append otherwise
+            # Normal append.
             new_chunk = out[self._out_len:]
             self._out_txt.configure(state=tk.NORMAL)
             self._out_txt.insert(tk.END, new_chunk)
@@ -634,34 +604,28 @@ class App(ttk.Frame):
 
         self._out_len = out_len
 
-        # Auto-scroll to bottom if enabled
         if self._out_autoscroll.get():
             self._out_txt.see(tk.END)
 
         self._refresh_stack_view()
 
     def _build(self) -> None:
-        """
-        Construct the main GUI layout.
-
-        Creates the toolbar with execution controls, the main text editor for
-        Befunge code, and the status bar. Sets up the tooltip system and
-        configures visual styling for the IP and breakpoints.
-        """
-        # Toolbar with execution controls
+        """Construct the main GUI layout (toolbar, editor, status bar, tooltips)."""
+        # Toolbar with execution controls.
         toolbar = ttk.Frame(self)
         toolbar.pack(fill=tk.X, pady=4)
 
         self.btn_open = ttk.Button(toolbar, text="Open... (Ctrl-O)", command=self.open_file)
-        self.btn_run = ttk.Button(toolbar, text="Run (F5)",
-                                  command=lambda: self.run(clear_output=True))
+        self.btn_run = ttk.Button(
+            toolbar, text="Run (F5)", command=lambda: self.run(clear_output=True)
+        )
         self.btn_step = ttk.Button(toolbar, text="Step (F10)", command=self.step_once)
         self.btn_stop = ttk.Button(toolbar, text="Stop (Esc)", command=self.stop)
 
         for w in (self.btn_open, self.btn_run, self.btn_step, self.btn_stop):
             w.pack(side=tk.LEFT, padx=4)
 
-        # Execution speed controls
+        # Execution speed controls.
         delay_group = ttk.Frame(toolbar)
         delay_group.pack(side=tk.LEFT, padx=(12, 10))
         ttk.Label(delay_group, text="Delay (ms)").pack(anchor=tk.CENTER)
@@ -680,56 +644,80 @@ class App(ttk.Frame):
             orient=tk.HORIZONTAL, length=160
         ).pack(anchor=tk.CENTER)
 
-        # Main code display
-        self.text = tk.Text(self, width=80, height=25,
-                            font=("Consolas", 12),
-                            background="#011b04", fg="#44C553",
-                            wrap=tk.NONE)
+        # Main code display.
+        self.text = tk.Text(
+            self,
+            width=80,
+            height=25,
+            font=("Consolas", 12),
+            background="#011b04",
+            fg="#44C553",
+            wrap=tk.NONE
+        )
         self.text.configure(setgrid=True, spacing1=0, spacing2=0, spacing3=0)
         self.text.pack(fill=tk.BOTH, expand=True)
 
-        # Interactive tooltip system
-        self._hover = OpcodeHoverTip(self.text,
-                                     formatter=tooltip_formatter,
-                                     delay=250,
-                                     interp=self.interp,
-                                     cell_filter=lambda ch, x, y: (
-                                         ch != "\n" and x < self.interp.ip.orig_width and y < self.interp.ip.orig_height
-                                     ))     
+        # Interactive tooltip system.
+        self._hover = OpcodeHoverTip(
+            self.text,
+            formatter=tooltip_formatter,
+            delay=250,
+            interp=self.interp,
+            cell_filter=lambda ch, x, y: (
+                ch != "\n" and x < self.interp.ip.orig_width and y < self.interp.ip.orig_height
+                )
+        )     
 
-        # Visual styling for debugging features
-        self.text.tag_configure("bp", background="#ff6b3d", foreground="#011b04")         # Breakpoints: orange-red
-        self.text.tag_configure("ip", background="#00d1a0", foreground="#011b04")         # IP: mint
-        self.text.tag_configure("hover_cell", background="#0a2516", foreground="#4ed05d")
+        # Visual styling for debugging features.
+        self.text.tag_configure(
+            "bp",
+            background="#ff6b3d",
+            foreground="#011b04"
+        )   # Breakpoints: orange-red
+        self.text.tag_configure(
+            "ip",
+            background="#00d1a0",
+            foreground="#011b04"
+        )   # IP: mint
+        self.text.tag_configure(
+            "hover_cell",
+            background="#0a2516",
+            foreground="#4ed05d"
+        )
         
         self.text.tag_raise("ip")
         self.text.tag_raise("bp")
         self.text.tag_raise("hover_cell")
 
-        # Status bar
-        self.status = ttk.Label(self, anchor="w")
+        # Status bar.
+        self.status = ttk.Label(self, anchor=tk.W)
         self.status.pack(fill=tk.X)
 
-        # Bind delay/steps text
+        # Bind delay/steps text.
         self._bind_value_labels()
 
         self._update_run_buttons()
 
     def _bind(self) -> None:
         """Set up keyboard shortcuts and mouse event handlers."""
-        # Keyboard shortcuts
+        # Keyboard shortcuts.
         self.master.bind("<Control-o>", lambda e: self.open_file())
         self.master.bind("<F5>", lambda e: self.run())
         self.master.bind("<F10>", lambda e: self.step_once())
         self.master.bind("<Escape>", lambda e: self.stop())
 
-        # Ctrl+LMB to toggle breakpoints
-        self.master.bind("<Control-Button-1>", self._on_toggle_bp_click, add=True)
+        # Ctrl+LMB to toggle breakpoints.
+        self.master.bind(
+            "<Control-Button-1>",
+            self._on_toggle_bp_click,
+            add=True
+        )
 
     def _bind_value_labels(self) -> None:
-        """Display speed and steps/tick values next to configuration sliders"""
+        """Display speed and steps/tick values next to configuration sliders."""
         def upd_delay(*_):
             self._delay_text.set(f"{int(self.speed_ms.get())}")
+
         def upd_steps(*_):
             self._steps_text.set(f"{int(self.steps_per_tick.get())}")
 
@@ -739,24 +727,15 @@ class App(ttk.Frame):
         self.speed_ms.trace_add("write", lambda *_: upd_delay())
         self.steps_per_tick.trace_add("write", lambda *_: upd_steps())
 
-    def run(self, *,
-            clear_output: bool = False) -> None:
-        """
-        Start continous program execution.
+    def run(self, *, clear_output: bool = False) -> None:
+        """Start continuous program execution.
 
         Begins automatic execution using a timer loop, opening the output window
         and optionally clearing previous output. Execution continues until the
         program halts, hits a breakpoint, or is manually stopped.
 
         Args:
-            `clear_output`: Whether to clear previous output before starting
-
-        Execution Features:
-            - Configurable speed control (1-500ms)
-            - Batch processing (1-50 steps per tick)
-            - Breakpoint-aware execution with automatic pausing
-            - Visual feedback and stack updates
-            - Output window management
+          clear_output: Whether to clear previous output before starting.
         """
         self._cancel_timer()
 
@@ -765,39 +744,29 @@ class App(ttk.Frame):
             self.status.config(text="No program is loaded")
             return
         
-        # Ensure output window is open
+        # Ensure output window is open.
         self.open_output_window(clear=clear_output)
 
-        # Pre-fill output if cleared to avoid inserting full backlog
+        # Pre-fill output if cleared to avoid inserting full backlog.
         if clear_output:
             self._prefill_output_from_interpreter()
 
-        # Begin execution loop
+        # Begin execution loop.
         self.tick()
 
     def _update_run_buttons(self) -> None:
-        """Disable run/step buttons if loaded file is empty, otherwise allow user to click."""
+        """Enable/disable run/step buttons based on whether a program is loaded."""
         empty = self._program_is_empty()
         state = tk.DISABLED if empty else tk.NORMAL
-
         self.btn_run.configure(state=state)
         self.btn_step.configure(state=state)
 
     def step_once(self) -> None:
-        """
-        Execute exactly one interpreter step.
+        """Execute exactly one interpreter step and update the UI.
 
-        Performs a single step of program execution, updates the display, and
-        handles any input requests. Allows user to continue through breakpoints with
-        manual control.
-
-        Execution Sequence:
-            1. Cancel any running timers
-            2. Validate program existence
-            3. Ensure output window is available
-            4. Execute single interpreter step
-            5. Update all GUI components
-            6. Handle special states (input, halt)
+        Cancels any running timers, ensures the output window is visible, performs
+        a single step, then refreshes the display. If the interpreter requests
+        input, shows the input bar.
         """
         self._cancel_timer()
 
@@ -806,7 +775,7 @@ class App(ttk.Frame):
             self.status.config(text="No program loaded")
             return
 
-        # Ensure output window is open but don't clear
+        # Ensure output window is open but don't clear.
         if not (self._out_win and self._out_win.winfo_exists()):
             self.open_output_window(clear=False)
             self._out_len = len(self.interp.output)
@@ -816,29 +785,27 @@ class App(ttk.Frame):
         self.render()
         self._append_output_if_needed()
 
-        # Handle input requests
         if status is StepStatus.AWAITING_INPUT:
             self._show_input_bar()
 
     def tick(self) -> None:
-        """
-        Execute one batch of interpreter steps and schedule the next batch.
+        """Execute one batch of steps and schedule the next batch.
 
-        Core of the automatic execution loop. Executes a configurable number of
-        steps, checks for breakpoints, and schedules the next execution batch
-        unless the program has halted or needs input.
+        Executes a configurable number of steps, checks for breakpoints, and
+        schedules the next batch unless the program has halted or needs input.
         """
         status = StepStatus.RUNNING
         steps = int(self.steps_per_tick.get())
 
-        # Execute batch of steps
         for _ in range(steps):
             ip = self.interp.ip
 
-            # Check for breakpoints before executing
+            # Check for breakpoints before executing.
             if (ip.x, ip.y) in self.breakpoints:
                 self._cancel_timer()
-                self.status.config(text=f"Paused at breakpoint ({ip.x},{ip.y})")
+                self.status.config(
+                    text=f"Paused at breakpoint ({ip.x},{ip.y})"
+                )
                 self.render()
                 self._append_output_if_needed()
                 return
@@ -847,43 +814,35 @@ class App(ttk.Frame):
             if status is not StepStatus.RUNNING:
                 break
 
-        # Update display
         self.render()
         self._append_output_if_needed()
 
-        # Schedule next batch or handle special states
         if status is StepStatus.RUNNING:
             self._after = self.after(int(self.speed_ms.get()), self.tick)
         elif status is StepStatus.AWAITING_INPUT:
             self._show_input_bar()
-        else:   # HALTED
+        else:
             self._cancel_timer()
     
     def stop(self) -> None:
-        """
-        Stop automatic execution but keep output window open.
-
-        Cancels the execution timer and hides the input bar if visible. Does
-        not close the output window, allowing users to examine results.
-        """
+        """Stop automatic execution but keep the output window open."""
         self._cancel_timer()
         if hasattr(self, "input_bar"):
             self.input_bar.pack_forget()
 
     def _program_is_empty(self) -> bool:
+        """Return True if no non-space chars appear within the original grid size."""
         ip = self.interp.ip
-
         if ip.orig_width == 0 or ip.orig_height == 0:
-            return True
-        
+            return True        
         for y in range(ip.orig_height):
             row = ip.grid[y][:ip.orig_width]
             if any(ch != " " for ch in row):
-                return False
-        
+                return False        
         return True
 
-    def _reschedule_if_running(self, *_):
+    def _reschedule_if_running(self, *_: object) -> None:
+        """If a timer is active, cancel and reschedule it with the new delay."""
         if self._after:
             try:
                 self.after_cancel(self._after)
@@ -898,12 +857,10 @@ class App(ttk.Frame):
             self._after = None
 
     def _build_input_bar(self) -> None:
-        """
-        Create the input bar for handling Befunge input operations.
+        """Create the input bar for handling Befunge input operations.
 
-        Builds the input interface used when the interpreter encounters `&`
-        (integer input) or `~` (character input) operations. The bar is
-        hidden by default and only shown when input is needed.
+        The bar is shown when the interpreter encounters '&' (integer input)
+        or '~' (character input) and hidden otherwise.
         """
         bar = ttk.Frame(self)
         lbl = ttk.Label(bar, text="Input:")
@@ -916,25 +873,23 @@ class App(ttk.Frame):
         btn_send.pack(side="left")
         btn_cancel.pack(side="left", padx=(6,0))
 
-        # Store references
+        # Store references.
         self.input_bar = bar
         self.input_label = lbl
         self.input_entry = ent
 
-        # Keyboard shortcuts for input
+        # Keyboard shortcuts for input.
         ent.bind("<Return>", lambda e: self.send_input())
         ent.bind("<Escape>", lambda e: self._hide_input_bar())
 
-        # Start hidden
+        # Start hidden.
         self.input_bar.pack_forget()
 
     def _show_input_bar(self) -> None:
-        """
-        Display the input bar and focus the entry field.
+        """Display the input bar and focus the entry field.
 
-        Shows the appropriate prompt based on the type of input needed (`int`
-        for `&` opcode, `char` for `~` opcode) and focuses the entry field for
-        immediate typing.
+        Shows the appropriate prompt based on the expected input type (int for
+        '&', char for '~') and focuses the entry for typing.
         """
         kind = getattr(self.interp.ip, "waiting_for", None) # WaitTypes.INT or WaitTypes.CHAR
         if not isinstance(kind, WaitTypes):
@@ -954,12 +909,11 @@ class App(ttk.Frame):
             self.input_bar.pack_forget()
 
     def send_input(self) -> None:
-        """
-        Process user input and send it to the interpreter.
+        """Validate user input and send it to the interpreter.
 
         Validates the input based on the expected type (integer or character),
         sends it to the interpreter, hides the input bar, and resumes execution.
-        Provides audio feedback for invalid input.
+        Provides audio feedback for invalid numeric input.
         """
         kind = getattr(self.interp.ip, "waiting_for", None)
         s = self.input_entry.get()
@@ -976,23 +930,20 @@ class App(ttk.Frame):
         else:
             return
 
-        # Send to interpreter and resume
         self.interp.provide_input(val)
         self._hide_input_bar()
         self.tick()
 
     def render(self) -> None:
-        """
-        Update the visual display of the grid and interpreter state.
+        """Update the visual display of the grid and interpreter state.
 
-        Refreshes the display with the current program grid, highlights
-        the IP position, updates breakpoint displays, refreshes the status
-        bar, and updates the stack view.
+        Refreshes the grid if it changed, highlights the IP position, repaints
+        breakpoints, updates the status bar, and refreshes the stack view.
         """
         grid = self.interp.ip.grid
         ip = self.interp.ip
 
-        # Update main window with current grid if grid has changed
+        # Update main window with current grid if grid has changed.
         if self._last_grid_rev != self.interp.grid_rev:
             self.text.configure(state=tk.NORMAL)
             self.text.delete("1.0", tk.END)
@@ -1009,30 +960,30 @@ class App(ttk.Frame):
         self.text.tag_add("ip", f"{ip.y+1}.{ip.x}", f"{ip.y+1}.{ip.x+1}")
         self._last_ip_xy = (ip.x, ip.y)
 
-        # Update breakpoint highlights
+        # Update breakpoint highlights.
         self._paint_breakpoints()
 
-        # Update status bar with current interpreter state
+        # Update status bar with current interpreter state.
         random_indicator = "[RANDOM]" if ip.last_was_random else ""
         self.status.config(
             text=f"IP=({ip.x},{ip.y}) [{ip.direction.glyph}] {random_indicator}   "
             f"Stack size={len(self.interp.stack)}"
             )
 
-        # Update stack visualization
+        # Update stack visualization.
         self._refresh_stack_view()
 
     def _sidecar_path(self, program_path: str) -> str:
-        """Generate the path for the settings sidecar file."""
+        """Return the path for the settings sidecar file for a program path."""
         return program_path + ".befmeta.json"
     
     def _current_settings(self) -> Dict[str, Any]:
-        """Get current settings as a dict for saving."""
+        """Return current settings as a dict for saving."""
         bps = [{"x": x, "y": y} for (x, y) in sorted(self.breakpoints)]
         return {
-            "delay_ms":         int(self.speed_ms.get()),
-            "steps_per_tick":   int(self.steps_per_tick.get()),
-            "breakpoints":      bps,
+            "delay_ms": int(self.speed_ms.get()),
+            "steps_per_tick": int(self.steps_per_tick.get()),
+            "breakpoints": bps,
         }
     
     def _save_sidecar_settings_if_changed(self) -> None:
@@ -1041,22 +992,20 @@ class App(ttk.Frame):
             return
         self._save_sidecar_settings()
 
-    def _on_settings_change(self, *_) -> None:
+    def _on_settings_change(self, *_: object) -> None:
         """Handle settings changes for auto-save tracking."""
         if self._suspend_setting_traces:
             return
         self._settings_changed = (self._current_settings() != self._last_saved_settings)
     
-    def _load_sidecar_settings(self, program_path: str):
-        """
-        Load settings from the sidecar file associated with a program.
+    def _load_sidecar_settings(self, program_path: str) -> None:
+        """Load settings from the sidecar file associated with a program.
 
         Attempts to load execution settings and breakpoints from a JSON file stored
-        alongside the Befunge program. Handles missing or corrupted files gracefully
-        by using defaults.
+        alongside the program. Handles missing or corrupted files gracefully.
 
         Args:
-            `program_path`: Path to the Befunge program file
+          program_path: Path to the Befunge program file.
         """
         try:
             with open(self._sidecar_path(program_path), "r", encoding="utf-8") as f:
@@ -1064,14 +1013,13 @@ class App(ttk.Frame):
         except FileNotFoundError:
             meta = {}
         except Exception:
-            meta = {}      # Handle corrupted JSON by starting fresh
+            meta = {}   # Corrupted JSON → start fresh
         
-        # Extract settings with validation
         delay   = meta.get("delay_ms")
         steps   = meta.get("steps_per_tick")
         bps     = meta.get("breakpoints", [])
 
-        # Apply settings with validation and temporarily disable change tracking
+        # Apply settings with validation; temporarily disable change tracking.
         self._suspend_setting_traces = True
         try:
             if isinstance(delay, int) and delay > 0 and delay <= 500:
@@ -1081,7 +1029,7 @@ class App(ttk.Frame):
         finally:
             self._suspend_setting_traces = False
 
-        # Load breakpoints with validation
+        # Load breakpoints with validation.
         self.breakpoints.clear()
         if isinstance(bps, list):
             for bp in bps:
@@ -1091,18 +1039,12 @@ class App(ttk.Frame):
         self._last_saved_settings = self._current_settings()
 
     def _save_sidecar_settings(self) -> None:
-        """
-        Save current settings to a sidecar JSON file.
-
-        Writes settings atomically using a temporary file to prevent
-        corruption from interruptions. Stores execution speed, step
-        batch size, and breakpoint locations.
-        """
+        """Save current settings to a sidecar JSON file (atomically)."""
         if not self.current_path:
             return
         
         meta = {
-            "version":          SETTINGS_VERSION,
+            "version":  SETTINGS_VERSION,
             **self._current_settings(),
         }
 
@@ -1110,71 +1052,46 @@ class App(ttk.Frame):
         dir_ = os.path.dirname(sidecar) or "."
 
         try:
-            # Atomic write using temporary file
+            # Atomic write using temporary file.
             fd, tmp = tempfile.mkstemp(prefix=".befmeta.", dir=dir_, text=True)
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(meta, f, indent=2, ensure_ascii=False)
                 os.replace(tmp, sidecar)
             finally:
-                # Clean up temp file if any errors
+                # Clean up temp file if an error occurred before replace.
                 if os.path.exists(tmp) and not os.path.samefile(tmp, sidecar):
                     try:
                         os.remove(tmp)
                     except OSError:
                         pass
         except Exception:
-            pass # Silently fail
+            # Silently ignore save errors (non-fatal for the app)
+            pass
 
         self._last_saved_settings = self._current_settings()
         self._settings_changed = False
 
-    # Coordinate conversion utilities for breakpoint handling
     def _index_to_xy(self, index: str) -> tuple[int, int]:
-        """
-        Convert Tkinter text index to grid coordinates.
-
-        Args:
-            `index`: Tkinter text index in "`line.column`" format
-
-        Returns:
-            Tuple of `(x, y)` grid coordinates
-        """
+        """Convert a Tk text index ('line.column') to grid coordinates (x, y)."""
         line, col = index.split(".")
         y = int(line) - 1
         x = int(col)
         return x, y
     
     def _xy_to_index(self, x: int, y: int) -> tuple[str, str]:
-        """
-        Convert grid coordinates to Tkinter text indices.
-
-        Args:
-            `x`: Grid x-coordinate
-            `y`: Grid y-coordinate
-
-        Returns:
-            Tuple of `(start_index, end_index)` for highlighting
-        """
+        """Convert grid coordinates to Tk text index range (start, end)."""
         start = f"{y+1}.{x}"
         end = f"{y+1}.{x+1}"
         return start, end
     
     def _on_toggle_bp_click(self, e) -> None:
-        """
-        Handle Ctrl+LMB to toggle breakpoints.
-
-        Converts the mouse click position to grid coordinates and toggles
-        a breakpoint at that location. Ignores clicks on newline characters.
-
-        Args:
-            `e`: Mouse click event
-        """
-        # Get character at click position
+        """Handle Ctrl+LMB to toggle breakpoints at the clicked cell."""
+        # Get character at click position.
         idx = self.text.index(f"@{e.x},{e.y}")
         ch = self.text.get(idx, f"{idx}+1c")
 
-        # Ignore clicks on newline
+        # Ignore clicks on newline.
         if ch == "\n":
             return
         
@@ -1184,16 +1101,7 @@ class App(ttk.Frame):
         self._toggle_breakpoint(x, y)
 
     def _toggle_breakpoint(self, x: int, y: int) -> None:
-        """
-        Toggle a breakpoint at the specified grid coordinates.
-
-        Adds or removes a breakpoint and updates the visual display.
-        Marks settings as changed for auto-save.
-
-        Args:
-            `x`: Grid x-coordinate
-            `y`: Grid y-coordinate
-        """
+        """Toggle a breakpoint at (x, y) and update the display."""
         key = (x, y)
         if key in self.breakpoints:
             self.breakpoints.remove(key)
@@ -1204,32 +1112,20 @@ class App(ttk.Frame):
         self._paint_breakpoints()
 
     def _paint_breakpoints(self) -> None:
-        """
-        Update visual display of breakpoints in the text widget.
-
-        Removes old breakpoint highlighting and applies new highlighting to all
-        current breakpoint locations. Ensures IP highlighting takes precedence
-        over breakpoint highlighting.
-        """
-        # Clear existing BP tags
+        """Highlight all breakpoints in the text widget (IP takes precedence)."""
+        # Clear existing BP tags.
         self.text.tag_remove("bp", "1.0", tk.END)
 
-        # Add tags for all current BPs
+        # Add tags for all current breakpoints.
         for (x, y) in self.breakpoints:
             start, end = self._xy_to_index(x, y)
             self.text.tag_add("bp", start, end)
 
-        # Ensure IP shows above BPs
+        # Ensure IP shows above BPs.
         self.text.tag_raise("ip")
 
     def _prefill_output_from_interpreter(self) -> None:
-        """
-        Initialize output window with current interpreter output.
-
-        Fills the output text widget with all current interpreter output and sets
-        tracking variables to prevent duplicate content when incremental updates
-        are applied.
-        """
+        """Initialize output window with current interpreter output."""
         if not (self._out_win and self._out_txt and self._out_win.winfo_exists()):
             return
         
@@ -1241,55 +1137,42 @@ class App(ttk.Frame):
         
         self._out_txt.configure(state=tk.DISABLED)
 
-        # Mark what's been shown - only append deltas
+        # Mark what's been shown-only append deltas later.
         self._out_len = len(self.interp.output)
 
     def _on_app_close(self) -> None:
-        """
-        Handle cleanup when application is closing.
-
-        Prevents multiple simultaneous close operations with `_closing` flag.
-
-        Performs graceful shutdown in order:
-        1. Cancel execution timers
-        2. Dispose hover tooltips and resources
-        3. Close output windows
-        4. Save any unsaved settings changes
-        5. Destroy main application window
-
-        All operations wrapped in try/except blocks for graceful failure handling.
-        """
+        """Handle cleanup when the application is closing (graceful shutdown)."""
         if getattr(self, "_closing", False):
             return # Prevent recursive close handling
         self._closing = True
 
-        # Stop execution timers
+        # Stop execution timers.
         try:
             self._cancel_timer()
         except Exception:
             pass
 
-        # Dispose tooltip system
+        # Dispose tooltip system.
         try:
             if hasattr(self, "_hover") and self._hover:
                 self._hover.dispose()
         except Exception:
             pass
 
-        # Close output window
+        # Close output window.
         try:
             if self._out_win and self._out_win.winfo_exists():
                 self._out_win.destroy()
         except Exception:
             pass
 
-        # Save settings if changed
+        # Save settings if changed.
         try:
             self._save_sidecar_settings_if_changed()
         except Exception:
             pass
 
-        # Destroy main window
+        # Destroy main window.
         try:
             self.winfo_toplevel().destroy()
         except Exception:

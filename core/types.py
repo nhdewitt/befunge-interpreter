@@ -1,47 +1,51 @@
+"""Shared types for the Befunge-93 interpreter.
+
+Defines:
+  - StepStatus: execution status after a step.
+  - WaitTypes: the kind of input the interpreter is waiting for.
+  - ViewState: a read-only snapshot of the interpreter state for GUIs.
+"""
+
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import List
 
 
 class StepStatus(Enum):
-    """
-    Enumeration of possible interpreter execution states.
+    """Interpreter execution status.
 
-    Used to communicate the current status of the interpreter after each
-    execution state, allowing the GUI to respond appropriately.
+    Used to communicate the current status after each execution step so
+    the UI can react appropriately.
     """
+
     RUNNING = auto()            # executing normally
     AWAITING_INPUT = auto()     # waiting for user input
-    HALTED = auto()             # terminated (reached `@` opcode)
+    HALTED = auto()             # terminated (reached '@')
+
 
 class WaitTypes(Enum):
-    """
-    Enumeration of possible user input types.
+    """Type of user input the interpreter requires."""
 
-    Used to determine which type of input the interpreter requires from the user.
-    """
     INT = "integer"
     CHAR = "character"
 
+
 @dataclass
 class ViewState:
-    """
-    Immutable snapshot of interpreter state for GUI display.
+    """Snapshot of interpreter state for GUI display.
 
-    Provides all necessary information for visualizing the current
-    interpreter state without exposing mutable internal objects.
+    Provides the information needed to visualize the current state.
 
     Attributes:
-        `ip_x`: Current IP x-coordinate
-        `ip_y`: Current IP y-coordinate
-        `direction`: Current movement direction as a string
-        `stack`: Copy of current stack contents (bottom->top)
-        `output`: Complete output string produced so far
-        `grid`: Copy of the current program grid
+      ip_x: Current IP x-coordinate.
+      ip_y: Current IP y-coordinate.
+      direction: Current movement direction as a glyph (e.g., '>', '<', '^', 'v').
+      stack: Copy of current stack contents (bottom → top).
+      output: Complete output produced so far.
+      grid: Current program grid (list of rows, each a list of characters).
     """
     ip_x:       int
     ip_y:       int
     direction:  str
-    stack:      List[int]
+    stack:      list[int]
     output:     str
-    grid:       List[List[str]]
+    grid:       list[list[str]]
