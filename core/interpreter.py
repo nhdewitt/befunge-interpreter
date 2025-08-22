@@ -58,8 +58,8 @@ class Interpreter:
         """
         Initialize the interpreter with Befunge source code.
 
-        Creates a new interpreter instance with the provided source doe, initializes the
-        opcode dispatch table, and sets up extended storage.
+        Creates a new interpreter instance with the provided source code and initializes the
+        opcode dispatch table.
 
         Args:
             `code`: Either a string containing Befunge source (with newlines),
@@ -68,11 +68,6 @@ class Interpreter:
         # Initialize opcode dispatch table and load Befunge code
         self._ops: Dict[str, Callable] = build_ops(self)
         self.load(code)
-        self.output_stream = StringIO()
-
-        # Shadow storage for put/get values outside 0-255
-        # Maps (x,y) to full 32-bit value
-        self.extended_storage: Dict[tuple[int, int], int] = {}
 
     @property
     def output(self) -> str:
@@ -96,10 +91,13 @@ class Interpreter:
         self.ip: InstructionPointer = InstructionPointer(code)
         self.output_stream = StringIO()
         self.halted = False
-        self.extended_storage.clear()
 
         # Track grid revision - only need to redraw on "p" or load()
         self.grid_rev = (getattr(self, "grid_rev", -1) + 1)
+
+        # Shadow storage for put/get values outside 0-255
+        # Maps (x,y) to full 32-bit value
+        self.extended_storage: Dict[tuple[int, int], int] = {}
 
     def reset(self) -> None:
         """
