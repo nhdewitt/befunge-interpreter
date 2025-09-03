@@ -236,6 +236,8 @@ class Interpreter:
 
             if v > 255 or v < 0:
                 self.extended_storage[(x, y)] = v
+                if v == 10:
+                    v = 32
                 self.ip.grid[y][x] = chr(abs(v) % 256)
             else:
                 self.ip.grid[y][x] = chr(v)

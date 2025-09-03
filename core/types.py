@@ -22,6 +22,13 @@ class StepStatus(Enum):
     HALTED = auto()             # terminated (reached '@')
 
 
+class ExecutionMode(Enum):
+    """Tracks the current execution mode for proper input continuation."""
+    STOPPED = auto()    # Not executing
+    RUNNING = auto()    # Continuous (F5)
+    STEPPING = auto()   # Step-by-step (F10)
+
+
 class WaitTypes(Enum):
     """Type of user input the interpreter requires."""
 

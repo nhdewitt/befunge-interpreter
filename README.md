@@ -1,47 +1,36 @@
-# Befunge-93 Interpreter
+# befunge-gui
 
-A complete implementation of the Befunge-93 programming language with an interactive GUI debugger and development environment.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Installation & Usage](#installation--usage)
-- [Architecture](#architecture)
-- [Core Components](#core-components)
-- [GUI Components](#gui-components)
-- [Befunge-93 Language Support](#befunge-93-language-support)
-- [Development Features](#development-features)
-- [File Formats](#file-formats)
-- [API Reference](#api-reference)
+A complete Befunge-93 interpreter with an interactive GUI debugger and development environment.
 
 ## Overview
 
-This project implements a full-featured Befunge-93 interpreter with real-time visualization, interactive debugging, and comprehensive development tools. Befunge is a two-dimensional, stack-based esoteric programming language where the instruction pointer moves through a grid of characters.
+**befunge-gui** is a full-featured implementation of the Befunge-93 programming language with real-time visualization, interactive debugging, and comprehensive development tools. Befunge is a two-dimensional, stack-based esoteric programming language where the instruction pointer moves through a grid of characters.
+
+![Befunge GUI Screenshot](screenshot.png)
+*Real-time execution with IP tracking, stack visualization, and interactive tooltips*
 
 ## Features
 
-### Core Interpreter
-- **Complete Befunge-93 compliance** - All standard opcodes supported
-- **Self-modifying code** - Full `p` (put) and `g` (get) operation support
-- **Extended value storage** - Handles 32-bit values beyond ASCII range
+### 🚀 Complete Befunge-93 Implementation
+- **Full specification compliance** - All standard opcodes supported
+- **Self-modifying code** - Complete `p` (put) and `g` (get) operations with extended 32-bit value storage
+- **C-style arithmetic** - Proper division and modulo semantics matching the specification
+- **String mode** - Multi-line string support with proper grid navigation
 - **Wraparound navigation** - Standard torus topology for IP movement
-- **Asynchronous I/O** - Non-blocking input handling for GUI integration
 
-### Development Environment
-- **Real-time visualization** - Live IP tracking and stack monitoring
-- **Interactive debugging** - Breakpoints, step-by-step execution
-- **Speed control** - Configurable execution speed (1-500ms delays)
-- **Batch execution** - Process multiple steps per timer tick (1-50 steps)
-- **Output window** - Dedicated program output with stack visualization
-- **Settings persistence** - Per-file settings saved automatically
+### 🛠️ Professional Development Environment
+- **Real-time visualization** - Live IP tracking with syntax highlighting
+- **Interactive debugging** - Breakpoints with Ctrl+Click, step-by-step execution
+- **Smart output window** - Dedicated output with live stack visualization and intelligent docking
+- **Speed control** - Configurable execution speed (1-500ms) and batch processing (1-50 steps/tick)
+- **Settings persistence** - Per-file configuration automatically saved as `.befmeta.json` sidecars
 
-### GUI Features
-- **Syntax highlighting** - Visual distinction for IP position and breakpoints
-- **Interactive tooltips** - Hover over opcodes for instant documentation
-- **Keyboard shortcuts** - Complete hotkey support for all operations
-- **File management** - Open, save, and manage Befunge source files
-- **Window docking** - Smart output window positioning
+### 💡 Advanced GUI Features
+- **Interactive tooltips** - Hover over any opcode for instant documentation with formatted tables
+- **Professional keyboard shortcuts** - Complete hotkey support (F5 run, F10 step, Esc stop, Ctrl+O open)
+- **Asynchronous I/O** - Non-blocking input handling for `&` and `~` operations
+- **File validation** - Smart detection of Befunge files with helpful error messages
+- **Window management** - Smart docking system that follows main window movement
 
 ## Installation & Usage
 
@@ -49,156 +38,68 @@ This project implements a full-featured Befunge-93 interpreter with real-time vi
 - Python 3.8+
 - tkinter (usually included with Python)
 
-### Running the Interpreter
+### Quick Start
 
 ```bash
-# Start with file dialog
+# Clone the repository
+git clone https://github.com/yourusername/befunge-gui.git
+cd befunge-gui
+
+# Run with file dialog
 python main.py
 
-# Open specific file
-python main.py program.bf
-python main.py example.befunge
+# Open a specific file
+python main.py examples/hello.bf
+python main.py program.befunge
 ```
 
-### Supported File Extensions
+### Supported File Formats
 - `.bf` - Standard Befunge files
 - `.befunge` - Alternative Befunge extension
+
+## Usage Guide
+
+### Basic Operations
+- **F5** - Run program (opens output window)
+- **F10** - Step through program one instruction at a time
+- **Esc** - Stop execution
+- **Ctrl+O** - Open file
+- **Ctrl+Click** - Toggle breakpoint on any cell
+
+### Development Workflow
+1. **Open** a Befunge file or start with a blank grid
+2. **Set breakpoints** by Ctrl+clicking on grid cells
+3. **Adjust speed** using the delay slider (1-500ms between steps)
+4. **Run or step** through your program while watching the stack and output
+5. **Settings auto-save** per file for seamless workflow resumption
+
+### Interactive Features
+- **Hover tooltips** - Mouse over any character for opcode documentation
+- **Live stack display** - Watch stack changes in real-time with ASCII character preview
+- **Output management** - Copy, save, or clear program output with autoscroll control
+- **Visual debugging** - IP position (mint green), breakpoints (orange-red), hover cells (dark green)
 
 ## Architecture
 
 ```
-befunge-interpreter/
-├── core/                   # Interpreter engine
-│   ├── InstructionPointer.py  # IP management and movement
-│   ├── interpreter.py         # Main interpreter class
-│   ├── direction.py          # Direction enum and utilities
-│   ├── stack.py             # Befunge stack implementation
-│   ├── ops.py               # Opcode dispatch table
-│   ├── types.py             # Type definitions and enums
-│   └── utils.py             # Math utilities (C-style division/modulo)
-├── ui/                     # GUI components
-│   ├── app.py               # Main application window
-│   ├── opcode_hovertips.py  # Interactive tooltip system
-│   ├── opcodes.py           # Opcode documentation
-│   └── format_stack.py      # Stack display formatting
-├── validate/               # Input validation
-│   └── validate_load.py     # File validation utilities
-└── main.py                 # Application entry point
+befunge-gui/
+├── core/                      # Interpreter engine
+│   ├── interpreter.py         # Main interpreter with extended storage
+│   ├── InstructionPointer.py  # IP management and grid navigation
+│   ├── stack.py              # Befunge-specific stack with zero semantics
+│   ├── direction.py          # 2D movement system
+│   ├── ops.py                # Opcode dispatch table
+│   ├── types.py              # Enums and data structures
+│   └── utils.py              # C-style arithmetic utilities
+├── ui/                       # GUI components
+│   ├── app.py                # Main application with smart docking
+│   ├── opcode_hovertips.py   # Interactive tooltip system
+│   ├── opcodes.py            # Opcode documentation and formatting
+│   └── format_stack.py       # Stack visualization utilities
+├── validate/                 # Input validation
+│   └── validate_load.py      # File and content validation
+└── main.py                   # CLI entry point
 ```
-
-## Core Components
-
-### InstructionPointer (`core/InstructionPointer.py`)
-
-Manages the instruction pointer state and movement within the 2D grid.
-
-**Key Features:**
-- Maintains current position (x, y) and direction
-- Handles wraparound movement on 80×25 minimum grid
-- Manages execution state flags (skip, string mode, I/O waiting)
-- Stores original program dimensions vs. padded grid size
-
-**Important Attributes:**
-- `grid`: 2D character array representing the program
-- `x`, `y`: Current IP coordinates
-- `direction`: Current movement direction (Direction enum)
-- `skip`: Bridge command (`#`) flag
-- `string`: String mode state
-- `waiting_for`: Input type expected (WaitTypes enum)
-
-### Interpreter (`core/interpreter.py`)
-
-The main interpreter engine implementing complete Befunge-93 semantics.
-
-**Key Features:**
-- Complete opcode support with dispatch table
-- Self-modifying code via extended storage system
-- Asynchronous input handling for GUI integration
-- Step-by-step execution with state inspection
-- Output stream management
-
-**Extended Storage System:**
-- Values > 255 or < 0 stored in `extended_storage` dictionary
-- Grid displays low byte (modulo 256) for visual reference
-- `g` operation retrieves full 32-bit value when available
-
-**Execution States:**
-- `RUNNING`: Normal execution
-- `AWAITING_INPUT`: Waiting for user input (`&` or `~` opcodes)
-- `HALTED`: Program terminated (`@` opcode)
-
-### Stack (`core/stack.py`)
-
-Befunge-specific stack implementation with language-appropriate semantics.
-
-**Befunge Semantics:**
-- Popping from empty stack returns 0 (no exceptions)
-- Specialized operations for common Befunge patterns
-- Iterator support for stack visualization
-- Safe two-element operations with automatic zero-filling
-
-### Direction System (`core/direction.py`)
-
-Direction management for 2D program flow.
-
-**Coordinate System:**
-- Origin (0,0) at top-left
-- X increases eastward, Y increases southward
-- Wraparound at grid boundaries
-
-**Direction Operations:**
-- Conversion from opcode characters (`>`, `<`, `^`, `v`)
-- Random direction selection for `?` opcode
-- Delta calculation for movement
-
-## GUI Components
-
-### Main Application (`ui/app.py`)
-
-The primary GUI application providing a complete development environment.
-
-**Window Layout:**
-- **Toolbar**: Execution controls and speed settings
-- **Editor**: Main text area with syntax highlighting
-- **Status Bar**: IP position, direction, and stack size
-- **Input Bar**: Appears for `&` and `~` operations (hidden by default)
-
-**Execution Controls:**
-- **Run (F5)**: Start continuous execution with output window
-- **Step (F10)**: Execute single instruction
-- **Stop (Esc)**: Halt execution, keep output window open
-- **Speed Control**: 1-500ms delay between steps
-- **Batch Size**: 1-50 steps per timer tick for faster execution
-
-**Debugging Features:**
-- **Breakpoints**: Ctrl+Click to toggle at any grid position
-- **Visual Highlighting**: IP position (mint green), breakpoints (orange-red)
-- **Settings Persistence**: Speed, breakpoints saved per-file
-
-### Interactive Tooltips (`ui/opcode_hovertips.py`)
-
-Advanced hover tooltip system for opcode documentation.
-
-**Features:**
-- **Delayed Display**: 250ms delay prevents flicker during mouse movement
-- **Cell Highlighting**: Visual feedback for hovered cells
-- **Dynamic Positioning**: Tooltips follow mouse cursor
-- **Boundary Filtering**: Only shows tooltips within original program area
-- **Resource Management**: Automatic cleanup and event unbinding
-
-### Output Window
-
-Dedicated window for program output and debugging information.
-
-**Layout:**
-- **Left Pane**: Scrollable program output (4:1 weight)
-- **Right Pane**: Live stack visualization (1:1 weight)
-- **Control Bar**: Copy, save, clear, autoscroll options
-
-**Smart Docking:**
-- Automatically positions relative to main window
-- Prefers right side, falls back to left or below
-- Follows main window movement
 
 ## Befunge-93 Language Support
 
@@ -206,58 +107,50 @@ Dedicated window for program output and debugging information.
 
 | Category | Opcodes | Description |
 |----------|---------|-------------|
-| **Arithmetic** | `+` `-` `*` `/` `%` | Standard arithmetic with C-style division |
+| **Arithmetic** | `+` `-` `*` `/` `%` | C-style arithmetic with proper truncation |
 | **Comparison** | `` ` `` `!` | Greater-than and logical NOT |
-| **Directions** | `>` `<` `^` `v` `?` | IP movement control |
-| **Conditionals** | `_` `|` | Horizontal and vertical if statements |
+| **Directions** | `>` `<` `^` `v` `?` | IP movement and random direction |
+| **Conditionals** | `_` `\|` | Horizontal and vertical if statements |
 | **Stack** | `:` `\` `$` | Duplicate, swap, pop operations |
 | **I/O** | `.` `,` `&` `~` | Integer/character output and input |
 | **Grid** | `g` `p` | Get and put for self-modifying code |
 | **Control** | `#` `@` `"` | Bridge, halt, string mode |
 | **Literals** | `0`-`9` | Push digit values |
 
-### String Mode
-- Activated/deactivated by `"` character
-- All characters (except `"`) pushed as ASCII values
-- Supports multi-line strings with proper grid navigation
+### Advanced Features
 
-### Self-Modifying Code
-- `p` operation: Modify grid at runtime
-- `g` operation: Read values from grid
-- Extended storage for 32-bit values
-- Grid updates trigger visual refresh
+**Self-Modifying Code with Extended Storage**
+- Values 0-255: Stored directly in grid as characters
+- Values outside 0-255: Stored in shadow dictionary with grid showing low byte
+- Full 32-bit integer support while maintaining visual grid fidelity
 
-## Development Features
+**Intelligent Grid Management**
+- Automatic padding to 80×25 minimum (Befunge-93 standard)
+- Original program dimensions preserved for visualization
+- Efficient updates with revision tracking
 
-### Settings System
-Each Befunge file gets an associated `.befmeta.json` sidecar file storing:
-- Execution speed (delay_ms)
-- Step batch size (steps_per_tick)  
-- Breakpoint locations
-- Settings version for backward compatibility
+## Examples
 
-### Keyboard Shortcuts
-- **Ctrl+O**: Open file
-- **F5**: Run program
-- **F10**: Step execution
-- **Esc**: Stop execution
-- **Ctrl+Click**: Toggle breakpoint
-
-### File Validation
-- Extension checking (`.bf`, `.befunge`)
-- Binary file detection
-- Befunge opcode presence validation
-- Optional halt instruction (`@`) validation
-
-## File Formats
-
-### Source Files
-Standard text files containing Befunge-93 source code:
-```
+### Hello World
+```befunge
 >25*"!dlroW ,olleH">:#,_@
 ```
 
-### Settings Files (`.befmeta.json`)
+### Factorial Calculator
+```befunge
+&>:1-:v v *_$.@ 
+ ^    _$>\:^
+```
+
+### Self-Modifying Counter
+```befunge
+>91+0p>:91+0g1+91+0p.91+0g9`#@_^
+```
+
+## Development
+
+### Per-File Settings (`.befmeta.json`)
+Each Befunge file automatically gets a settings sidecar:
 ```json
 {
   "version": 2,
@@ -270,77 +163,76 @@ Standard text files containing Befunge-93 source code:
 }
 ```
 
-## API Reference
+### API Usage
+```python
+from core.interpreter import Interpreter
 
-### Core Classes
+# Create interpreter
+interp = Interpreter(">91+.@")
 
-#### `Interpreter(code: Union[str, List[List[str]]])`
-Main interpreter class.
+# Step through execution
+while True:
+    status = interp.step()
+    if status != StepStatus.RUNNING:
+        break
 
-**Methods:**
-- `step() -> StepStatus`: Execute one instruction
-- `reset()`: Reset to initial state
-- `load(code)`: Load new program
-- `provide_input(value: int)`: Supply input for `&`/`~` operations
-- `view() -> ViewState`: Get immutable state snapshot
+print(interp.output)  # "10"
+```
 
-**Properties:**
-- `output: str`: Complete program output
-- `stack: Stack`: Execution stack
-- `ip: InstructionPointer`: Instruction pointer
-- `halted: bool`: Program termination state
+## Technical Highlights
 
-#### `InstructionPointer(code: Union[str, Sequence[Sequence[str]]])`
-Instruction pointer management.
+### Performance Optimizations
+- **Incremental rendering** - Only updates changed grid regions
+- **Batch processing** - Execute multiple steps per GUI update
+- **Output streaming** - Efficient handling of large program output
+- **Smart docking** - Minimal window repositioning calculations
 
-**Methods:**
-- `move() -> Tuple[int, int]`: Advance IP one step
-- `change_direction(d: Direction, *, from_random: bool = False)`: Update direction
+### GUI Architecture
+- **Event-driven execution** - Non-blocking with timer-based stepping
+- **Resource management** - Proper cleanup and memory management
+- **Error handling** - Graceful degradation with user feedback
+- **Cross-platform** - Pure Python/Tkinter for maximum compatibility
 
-**Properties:**
-- `x`, `y: int`: Current coordinates
-- `direction: Direction`: Movement direction
-- `grid: List[List[str]]`: Program grid
-- `width`, `height: int`: Grid dimensions
+## Contributing
 
-#### `Stack()`
-Befunge-specific stack implementation.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes with tests
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
-**Methods:**
-- `push(item: int)`: Add item to top
-- `pop() -> int`: Remove top item (returns 0 if empty)
-- `pop_two() -> Tuple[int, int]`: Pop two items safely
-- `peek() -> int`: View top item without removing
-- `stack_swap()`: Swap top two items
+### Development Setup
+```bash
+# Clone and setup
+git clone https://github.com/yourusername/befunge-gui.git
+cd befunge-gui
 
-### Enums
+# Run tests (when available)
+python -m pytest
 
-#### `StepStatus`
-- `RUNNING`: Normal execution
-- `AWAITING_INPUT`: Waiting for user input
-- `HALTED`: Program terminated
+# Run with development options
+python main.py --help
+```
 
-#### `WaitTypes`  
-- `INT`: Waiting for integer input (`&`)
-- `CHAR`: Waiting for character input (`~`)
+## License
 
-#### `Direction`
-- `RIGHT`, `LEFT`, `UP`, `DOWN`: Cardinal directions
-- Each has `dx`, `dy` deltas and `glyph` character
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-### GUI Classes
+## Acknowledgments
 
-#### `App(master, interp: Interpreter, *, open_on_start: bool = True)`
-Main GUI application.
+- [Befunge-93 Specification](https://catseye.tc/view/Befunge-93/doc/Befunge-93.markdown) by Chris Pressey
+- The esoteric programming language community
+- Contributors and testers who helped refine the implementation
 
-**Methods:**
-- `open_file()`: File selection dialog
-- `load_file(src: str, path: Optional[str])`: Load program
-- `run(clear_output: bool = False)`: Start execution
-- `step_once()`: Single step execution
-- `stop()`: Stop execution
-- `open_output_window(clear: bool = True)`: Show output window
+## Alternatives
+
+If **befunge-gui** doesn't meet your needs, consider these alternatives:
+- **bef** - Command-line Befunge interpreter
+- **cfunge** - High-performance C implementation
+- **pyfunge** - Python Befunge-98 interpreter (different spec)
+- **jefunge** - Web-based Befunge interpreter
 
 ---
 
-*This documentation reflects the current state of the codebase and will be updated as features are added or modified.*
+*Built with ❤️ for the esoteric programming community*

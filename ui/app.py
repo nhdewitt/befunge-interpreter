@@ -22,7 +22,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from core.interpreter import Interpreter
-from core.types import StepStatus, WaitTypes
+from core.types import StepStatus, WaitTypes, ExecutionMode
 from .opcode_hovertips import OpcodeHoverTip
 from .opcodes import OPCODES, format_tooltip_for_opcode, compute_widths
 from .format_stack import fmt_stack_item
@@ -78,38 +78,38 @@ def tooltip_formatter(ch: str) -> str:
     return TOOLTIP_CACHE[ch]
 
 class App(ttk.Frame):
-    """Main GUI application for the Befunge interpreter.
+    """Main GUI application
 
-    Window management:
-      - Main editor window with syntax highlighting.
-      - Detachable output window with docking.
-      - Window state preservation.
+    Window layout:
+    - Toolbar: Execution controls and speed settings (top)
+    - Main area: Horizontal paned window with code editor and stack
+    - Output area: Program output display (bottom)
+    - Input bar: Appears below output when needed
 
     Execution control:
-      - Variable speed execution (1–500 ms delays).
-      - Batch processing (1–50 steps per tick).
-      - Breakpoint-aware execution with pause/resume.
-      - Asynchronous input handling for user interaction.
-
+    - Variable speed execution (1-500ms delay)
+    - Batch processing (1-50 steps per tick)
+    - Breakpoint-aware execution with pause/resume
+    
     Attributes:
-      interp: The Befunge interpreter instance.
-      speed_ms: IntVar controlling delay between execution steps.
-      steps_per_tick: IntVar controlling batch size per timer tick.
-      breakpoints: Set of (x, y) coordinates where execution should pause.
-      current_path: Path to the currently loaded file (None if unsaved).
-      last_dir: Last directory used for file operations.
+        interp: The Befunge interpreter instance
+        speed_ms: IntVar controlling delay between execution steps
+        steps_per_tick: IntVar controlling batch size per timer tick
+        breakpoints: Set of (x, y) coordinates where execution should pause
+        current_path = Path to the currently loaded file
+        last_dir: Last directory used for file operations
 
     GUI components:
-      text: Main Text widget displaying the Befunge grid.
-      status: Label showing current interpreter state.
-      input_bar: Frame containing input controls (hidden by default).
-      _out_win: Optional Toplevel window for program output.
-      _hover: OpcodeHoverTip instance for interactive tooltips.
+        text: Main Text widget displaying the Befunge grid
+        status: Label showing current interpreter state
+        input_bar: Frame containing input controls (hidden by default)
+        output_text: Text widget for program output
+        stack_listbox: Listbox showing current stack contents
 
     Settings management:
-      _last_saved_settings: Cached settings for change detection.
-      _settings_changed: Flag indicating unsaved settings changes.
-      _suspend_setting_traces: Flag to prevent recursive setting updates.
+        _last_saved_settings: Cached settings for change detection
+        _settings_changed: Flag indicating unsaved settings changes
+        _suspend_setting_traces: Flag to prevent recursive setting updates
     """
     def __init__(
             self,
@@ -130,11 +130,10 @@ class App(ttk.Frame):
         Initialization sequence:
           1. Configure window close handler for graceful shutdown.
           2. Initialize application state and execution control.
-          3. Set up output window management.
-          4. Configure settings persistence.
-          5. Build GUI components and event handlers.
-          6. Initialize tooltip and visualization systems.
-          7. Perform initial rendering and optional file opening.
+          3. Configure settings persistence.
+          4. Build GUI components and event handlers.
+          5. Initialize tooltip and visualization systems.
+          6. Perform initial rendering and optional file opening.
         """
         super().__init__(master, **kwargs)
 
@@ -145,14 +144,10 @@ class App(ttk.Frame):
         # Core application state.
         self.interp = interp
         self._after: Optional[str] = None   # Timer ID for execution loop
-        self._shown_output = False
 
-        # Output window components (created on demand).
-        self._out_win: Optional[tk.Toplevel] = None
-        self._out_txt: Optional[tk.Text] = None
-        self._out_len: int = 0  # Track output length for incremental updates
+        # Output tracking for incremental updates
+        self._out_len: int = 0
         self._out_autoscroll = tk.BooleanVar(value=True)
-        self._stack_lb: Optional[tk.Listbox] = None
 
         # Execution control settings.
         self.speed_ms = tk.IntVar(value=DEFAULT_SETTINGS["delay_ms"])
@@ -182,11 +177,6 @@ class App(ttk.Frame):
 
         # Grid revision tracking for efficient GUI updates.
         self._last_grid_rev: int = -1
-
-        # Output window docking system.
-        self._dock_side: Optional[str] = None
-        self._dock_gap: int = 12
-        self._dock_bind_id: Optional[str] = None
 
         # Visual state tracking.
         self._last_ip_xy: Optional[Tuple[int, int]] = None
@@ -279,259 +269,7 @@ class App(ttk.Frame):
         """Update window title to show the current filename."""
         root = self.winfo_toplevel()
         name = os.path.basename(self.current_path) if self.current_path else "(untitled)"
-        root.title(f"Befunge - {name}")
-
-    def open_output_window(self, clear: bool = True) -> None:
-        """Open or focus the program output window.
-
-        Creates a new output window if none exists, or brings the existing window
-        to the foreground. The window shows program output and a live view of the
-        execution stack.
-
-        Args:
-          clear: Whether to clear existing output when opening.
-
-        Window layout:
-          - Left pane (weight 4): scrollable text area for program output.
-          - Right pane (weight 1): stack visualization (top down).
-          - Bottom bar: controls for copy, save, clear, autoscroll.
-
-        Smart docking:
-          - Chooses position relative to main window (right, left, below).
-          - Follows main window movement with a gap.
-          - Preserves relative positioning across sessions.
-
-        Output management:
-          - Incremental updates for performance with large output.
-          - Optional autoscroll.
-          - Output truncation (last 100k characters when very large).
-        """
-        # Focus existing window if already open.
-        if self._out_win and self._out_win.winfo_exists():
-            try:
-                if str(self._out_win.state()) == "iconic":
-                    self._out_win.deiconify()
-            except Exception:
-                pass
-
-            if clear:
-                self._clear_output_text()
-                self._refresh_stack_view()
-                self._prefill_output_from_interpreter()
-            return
-        
-        # Create new output window.
-        win = tk.Toplevel(self)
-
-        try:
-            win.transient(None)
-        except Exception:
-            pass
-        try:
-            win.attributes("-topmost", False)
-        except Exception:
-            pass
-
-        name = os.path.basename(self.current_path) if self.current_path else "(untitled)"
-        win.title(f"{name} Output")
-        win.resizable(True, True)
-
-        content = ttk.Frame(win)
-        content.pack(fill="both", expand=True, padx=8, pady=(8, 0))
-
-        # Horizontal paned window for output text and stack view.
-        pw = ttk.Panedwindow(content, orient=tk.HORIZONTAL)
-        pw.pack(fill="both", expand=True)
-
-        # Left pane: Program output text with scrollbar.
-        left = ttk.Frame(pw)
-        txt = tk.Text(left, wrap=tk.WORD, font=("Consolas", 11), height=16)
-        yscroll_out = ttk.Scrollbar(left, orient=tk.VERTICAL, command=txt.yview)
-        txt.configure(state=tk.DISABLED, yscrollcommand=yscroll_out.set)
-
-        left.columnconfigure(0, weight=1)
-        left.rowconfigure(0, weight=1)
-        txt.grid(row=0, column=0, sticky=tk.NSEW)
-        yscroll_out.grid(row=0, column=1, sticky=tk.NS)
-
-        # Right pane: Stack visualization with scrollbar.
-        right = ttk.Frame(pw, width=160)
-        ttk.Label(right, text="Stack").pack(anchor=tk.W, padx=4, pady=(0, 4))
-        lb = tk.Listbox(right, font=("Consolas", 11), activestyle=tk.NONE)
-        yscroll_stack = ttk.Scrollbar(right, orient=tk.VERTICAL, command=lb.yview)
-        lb.configure(yscrollcommand=yscroll_stack.set)
-
-        lb.pack(side=tk.LEFT, fill="both", expand=True, padx=(4, 0), pady=(0, 4))
-        yscroll_stack.pack(side=tk.LEFT, fill="y", padx=(0, 4), pady=(0, 4))
-
-        pw.add(left, weight=4)  # Output gets majority of space.
-        pw.add(right, weight=1) # Stack gets smaller portion.
-
-        # Control bar at bottom.
-        bar = ttk.Frame(win)
-        bar.pack(fill="x", padx=8, pady=(6, 8))
-
-        ttk.Checkbutton(bar, text="Autoscroll",
-                        variable=self._out_autoscroll).pack(side=tk.LEFT)
-
-        def copy_all() -> None:
-            """Copy all program output to clipboard."""
-            self.clipboard_clear()
-            self.clipboard_append(self.interp.output)
-        
-        def save_to_file() -> None:
-            """Save program output to a text file."""
-            base = "Untitled"
-            if self.current_path:
-                base = os.path.splitext(os.path.basename(self.current_path))[0]
-            default_name = base + ".txt"
-
-            path = filedialog.asksaveasfilename(
-                parent=win,
-                title="Save output",
-                initialdir=self.last_dir or (os.path.dirname(self.current_path) if self.current_path else "."),
-                initialfile=default_name,
-                defaultextension=".txt",
-                filetypes=[("Text files (*.txt)", "*.txt"), ("All files (*.*)", "*.*")],
-                confirmoverwrite=True,
-            )
-            if path:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(self.interp.output)
-        
-        # Control buttons.
-        ttk.Button(bar, text="Copy", command=copy_all).pack(side=tk.LEFT, padx=(8,0))
-        ttk.Button(bar, text="Save...", command=save_to_file).pack(side=tk.LEFT, padx=6)
-        ttk.Button(bar, text="Clear", command=self._clear_output_text).pack(side=tk.LEFT, padx=6)
-        ttk.Button(bar, text="Close", command=win.destroy).pack(side=tk.RIGHT)
-
-        # Store references for updates and state management.
-        self._out_win = win
-        self._out_txt = txt
-        self._stack_lb = lb
-        self._out_len = 0
-
-        # Set up docking system.
-        self._dock_side = self._choose_dock_side(win)
-        self._place_docked(win)
-        self._bind_follow_main(win)
-
-        if clear:
-            self._clear_output_text()
-            self._prefill_output_from_interpreter()
-        else:
-            self._out_len = len(self.interp.output)
-
-        def on_close() -> None:
-            """Clean up references and event handlers when window is closed."""
-            self._out_win = None
-            self._out_txt = None
-            self._stack_lb = None
-
-            if self._dock_bind_id:
-                try:
-                    self.winfo_toplevel().unbind("<Configure>", self._dock_bind_id)
-                except Exception:
-                    pass
-                self._dock_bind_id = None
-            win.destroy()
-
-        win.protocol("WM_DELETE_WINDOW", on_close)
-
-        # Initialize content with current state.
-        if clear:
-            self._clear_output_text()
-        self._refresh_stack_view()
-
-    def _choose_dock_side(self, win: tk.Toplevel) -> str:
-        """Choose the optimal docking side for the output window.
-
-        Prefers right side, with fallbacks based on available space.
-
-        Args:
-          win: The output window to position.
-
-        Returns:
-          "right", "left", or "below".
-        """
-        root = self.winfo_toplevel()
-        root.update_idletasks()
-        win.update_idletasks()
-
-        sw = root.winfo_screenwidth()
-        rx = root.winfo_rootx()
-        rw = root.winfo_width()
-        ww = win.winfo_reqwidth()
-
-        # Prefer right, then left, then below.
-        if rx + rw + self._dock_gap + ww <= sw:
-            return "right"
-        if rx - self._dock_gap - ww >= 0:
-            return "left"
-        return "below"
-    
-    def _place_docked(self, win: tk.Toplevel) -> None:
-        """Position the output window relative to the main window.
-
-        Args:
-          win: The output window to position.
-
-        Positioning logic:
-          - Right: adjacent to right edge with a gap.
-          - Left: adjacent to left edge with a gap.
-          - Below: underneath the main window with a gap.
-          - Boundary checking keeps the window on-screen.
-        """
-        if not (win and win.winfo_exists()):
-            return
-        
-        root = self.winfo_toplevel()
-        root.update_idletasks()
-        win.update_idletasks()
-
-        rx, ry = root.winfo_rootx(), root.winfo_rooty()
-        rw, rh = root.winfo_width(), root.winfo_height()
-        ww, wh = win.winfo_reqwidth(), win.winfo_reqheight()
-        side = self._dock_side or "right"
-        gap = self._dock_gap
-
-        if side == "right":
-            x, y = rx + rw + gap, ry
-        elif side == "left":
-            x, y = rx - ww - gap, ry
-        else:
-            x, y = rx, ry + rh + gap
-
-        # Keep on screen.
-        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        x = max(0, min(x, sw - ww))
-        y = max(0, min(y, sh - wh))
-
-        win.geometry(f"+{x}+{y}")
-
-    def _bind_follow_main(self, win: tk.Toplevel) -> None:
-        """Make the output window follow the main window movement/resizing.
-
-        Binds handlers so the docking position is maintained as the main window
-        moves/resizes.
-
-        Args:
-          win: The output window to reposition when the main window changes.
-        """
-        if self._dock_bind_id:
-            try:
-                self.winfo_toplevel().unbind("<Configure>", self._dock_bind_id)
-            except Exception:
-                pass
-            self._dock_bind_id = None
-
-        def _on_cfg(_e=None):
-            if win.winfo_exists():
-                self._place_docked(win)
-
-        self._dock_bind_id = self.winfo_toplevel().bind(
-            "<Configure>", _on_cfg, add=True
-        )
+        root.title(f"befunge-gui - {name}")
 
     def _refresh_stack_view(self) -> None:
         """Update the stack visualization in the output window.
@@ -539,10 +277,10 @@ class App(ttk.Frame):
         Displays stack contents from top to bottom in the listbox, with each item
         showing numeric value and ASCII character representation when applicable.
         """
-        if not (self._out_win and self._stack_lb and self._out_win.winfo_exists()):
+        if not hasattr(self, "stack_listbox"):
             return
         
-        lb = self._stack_lb
+        lb = self.stack_listbox
         lb.delete(0, tk.END)
 
         # Display stack from top to bottom.
@@ -553,10 +291,10 @@ class App(ttk.Frame):
     def _clear_output_text(self) -> None:
         """Clear the output text area and reset tracking variables."""
         self._out_len = 0
-        if self._out_txt and self._out_txt.winfo_exists():
-            self._out_txt.configure(state=tk.NORMAL)
-            self._out_txt.delete("1.0", tk.END)
-            self._out_txt.configure(state=tk.DISABLED)
+        if hasattr(self, "output_text"):
+            self.output_text.configure(state=tk.NORMAL)
+            self.output_text.delete("1.0", tk.END)
+            self.output_text.configure(state=tk.DISABLED)
 
     def _append_output_if_needed(self) -> None:
         """Append new output to the output window if the interpreter output grew.
@@ -564,7 +302,7 @@ class App(ttk.Frame):
         Appends only the new portion of output for performance. Also manages
         autoscroll and trims very large widgets.
         """
-        if not (self._out_win and self._out_txt and self._out_win.winfo_exists()):
+        if not hasattr(self, "output_text"):
             return
         
         out = self.interp.output
@@ -577,35 +315,34 @@ class App(ttk.Frame):
         if out_len > MAX_DISPLAY:
             if self._out_len == 0:
                 # First display: show truncation message, then last MAX_DISPLAY.
-                self._out_txt.configure(state=tk.NORMAL)
-                self._out_txt.insert(
+                self.output_text.configure(state=tk.NORMAL)
+                self.output_text.insert(
                     tk.END, f"[Output truncated - showing last {MAX_DISPLAY} chars]\n"
                 )
-                self._out_txt.insert(tk.END, out[-MAX_DISPLAY:])
-                self._out_txt.configure(state=tk.DISABLED)
+                self.output_text.insert(tk.END, out[-MAX_DISPLAY:])
             else:
                 # Append new portion.
                 new_chunk = out[self._out_len:]
-                self._out_txt.configure(state=tk.NORMAL)
+                self.output_text.configure(state=tk.NORMAL)
 
                 # If text widget is getting too large, trim from beginning.
-                current_size = int(self._out_txt.index('end-1c').split('.')[0])
+                current_size = int(self.output_text.index('end-1c').split('.')[0])
                 if current_size > 10_000:
-                    self._out_txt.delete('1.0', '100.0')    # Remove first 100 lines.
+                    self.output_text.delete('1.0', '100.0')    # Remove first 100 lines.
 
-                self._out_txt.insert(tk.END, new_chunk)
-                self._out_txt.configure(state=tk.DISABLED)
+                self.output_text.insert(tk.END, new_chunk)
+                self.output_text.configure(state=tk.DISABLED)
         else:
             # Normal append.
             new_chunk = out[self._out_len:]
-            self._out_txt.configure(state=tk.NORMAL)
-            self._out_txt.insert(tk.END, new_chunk)
-            self._out_txt.configure(state=tk.DISABLED)
+            self.output_text.configure(state=tk.NORMAL)
+            self.output_text.insert(tk.END, new_chunk)
+            self.output_text.configure(state=tk.DISABLED)
 
         self._out_len = out_len
 
         if self._out_autoscroll.get():
-            self._out_txt.see(tk.END)
+            self.output_text.see(tk.END)
 
         self._refresh_stack_view()
 
@@ -644,20 +381,197 @@ class App(ttk.Frame):
             orient=tk.HORIZONTAL, length=160
         ).pack(anchor=tk.CENTER)
 
-        # Main code display.
+        # Main content area: Vertical paned window for code/stack and output
+        main_paned = ttk.PanedWindow(self, orient=tk.VERTICAL)
+        main_paned.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
+
+        # Top section: Horizontal paned window for code and stack
+        top_frame = ttk.Frame(main_paned)
+        code_paned = ttk.Panedwindow(top_frame, orient=tk.HORIZONTAL)
+        code_paned.pack(fill=tk.BOTH, expand=True)
+
+        # Left: Code
+        code_frame = ttk.Frame(code_paned, width=600)
         self.text = tk.Text(
-            self,
+            code_frame,
             width=80,
             height=25,
             font=("Consolas", 12),
-            background="#011b04",
-            fg="#44C553",
+            bg="#011b04",
+            fg="#44c553",
             wrap=tk.NONE
         )
         self.text.configure(setgrid=True, spacing1=0, spacing2=0, spacing3=0)
-        self.text.pack(fill=tk.BOTH, expand=True)
 
-        # Interactive tooltip system.
+        # Code scrollbars
+        code_scroll_v = ttk.Scrollbar(
+            code_frame,
+            orient=tk.VERTICAL,
+            command=self.text.yview
+            )
+        code_scroll_h = ttk.Scrollbar(
+            code_frame,
+            orient=tk.HORIZONTAL,
+            command=self.text.xview
+        )
+        self.text.configure(
+            yscrollcommand=code_scroll_v.set,
+            xscrollcommand=code_scroll_h.set
+            )
+        
+        # Grid layout for code + scrollbars
+        code_frame.columnconfigure(0, weight=1)
+        code_frame.rowconfigure(0, weight=1)
+        self.text.grid(row=0, column=0, sticky=tk.NSEW)
+        code_scroll_v.grid(row=0, column=1, sticky=tk.NS)
+        code_scroll_h.grid(row=1, column=0, sticky=tk.EW)
+
+        # Right: Stack panel
+        stack_frame = ttk.Frame(code_paned, width=200)
+        ttk.Label(
+            stack_frame,
+            text="Stack",
+            font=("Consolas", 11, "bold")
+        ).pack(anchor=tk.W, padx=4, pady=(4, 2))
+
+        # Stack listbox with scrollbar
+        stack_container = ttk.Frame(stack_frame)
+        stack_container.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
+
+        self.stack_listbox = tk.Listbox(
+            stack_container,
+            font=("Consolas", 10),
+            activestyle=tk.NONE,
+            bg="#011b04",
+            fg="#44c553",
+            selectbackground="#0a2516"
+        )
+        stack_scroll = ttk.Scrollbar(
+            stack_container,
+            orient=tk.VERTICAL,
+            command=self.stack_listbox.yview
+        )
+        self.stack_listbox.configure(yscrollcommand=stack_scroll.set)
+
+        # Grid for stack with scrollbar
+        stack_container.columnconfigure(0, weight=1)
+        stack_container.rowconfigure(0, weight=1)
+        self.stack_listbox.grid(row=0, column=0, sticky=tk.NSEW)
+        stack_scroll.grid(row=0, column=1, sticky=tk.NS)
+
+        # Add frames to horizontal window
+        code_paned.add(code_frame, weight=4)
+        code_paned.add(stack_frame, weight=1)
+
+        # Bottom section: Output
+        output_frame = ttk.Frame(main_paned, height=200)
+
+        # Output header with controls
+        output_header = ttk.Frame(output_frame)
+        output_header.pack(fill=tk.X, padx=4, pady=(4, 2))
+
+        ttk.Label(
+            output_header,
+            text="Program Output",
+            font=("Consolas", 11, "bold")
+        ).pack(side=tk.LEFT) 
+
+        # Output controls
+        controls_frame = ttk.Frame(output_header)
+        controls_frame.pack(side=tk.RIGHT)
+
+        ttk.Checkbutton(
+            controls_frame,
+            text="Autoscroll",
+            variable=self._out_autoscroll
+        ).pack(side=tk.LEFT)
+
+        def copy_all() -> None:
+            """Copy all output to clipboard."""
+            self.clipboard_clear()
+            self.clipboard_append(self.interp.output)
+
+        def save_to_file() -> None:
+            """Save output to a text file."""
+            base = "Untitled"
+            if self.current_path:
+                base = os.path.splitext(
+                    os.path.basename(self.current_path)
+                )[0]
+            default_name = base + ".txt"
+
+            path = filedialog.asksaveasfilename(
+                parent=self.winfo_toplevel(),
+                title="Save output to file",
+                initialdir=self.last_dir or (os.path.dirname(self.current_path) if self.current_path else "."),
+                initialfile=default_name,
+                defaultextension=".txt",
+                filetypes=[
+                    ("Text files (*.txt)", "*.txt"),
+                    ("All files (*.*)", "*.*")
+                ],
+                confirmoverwrite=True
+            )
+            if path:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(self.interp.output)
+        
+        ttk.Button(
+            controls_frame,
+            text="Copy",
+            command=copy_all
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            controls_frame,
+            text="Save...",
+            command=save_to_file
+        ).pack(side=tk.LEFT, padx=6)
+        ttk.Button(
+            controls_frame,
+            text="Clear",
+            command=self._clear_output_text
+        ).pack(side=tk.LEFT, padx=6)
+
+        # Output text area with scrollbar
+        output_container = ttk.Frame(output_frame)
+        output_container.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0,4))
+
+        self.output_text = tk.Text(
+            output_container,
+            wrap=tk.WORD,
+            font=("Consolas", 10),
+            height=8,
+            state=tk.DISABLED,
+            bg="#011b04",
+            fg="#44c553"
+        )
+        output_scroll_v = ttk.Scrollbar(
+            output_container,
+            orient=tk.VERTICAL,
+            command=self.output_text.yview
+        )
+        output_scroll_h = ttk.Scrollbar(
+            output_container,
+            orient=tk.HORIZONTAL,
+            command=self.output_text.xview
+        )
+        self.output_text.configure(
+            yscrollcommand=output_scroll_v.set,
+            xscrollcommand=output_scroll_h.set
+        )
+
+        # Grid layout for output with scrollbars
+        output_container.columnconfigure(0, weight=1)
+        output_container.rowconfigure(0, weight=1)
+        self.output_text.grid(row=0, column=0, sticky=tk.NSEW)
+        output_scroll_v.grid(row=0, column=1, sticky=tk.NS)
+        output_scroll_h.grid(row=1, column=0, sticky=tk.EW)
+
+        # Add to main paned window
+        main_paned.add(top_frame, weight=3)
+        main_paned.add(output_frame, weight=1)
+
+        # Pop-up tooltip system
         self._hover = OpcodeHoverTip(
             self.text,
             formatter=tooltip_formatter,
@@ -665,10 +579,10 @@ class App(ttk.Frame):
             interp=self.interp,
             cell_filter=lambda ch, x, y: (
                 ch != "\n" and x < self.interp.ip.orig_width and y < self.interp.ip.orig_height
-                )
-        )     
+            )
+        )
 
-        # Visual styling for debugging features.
+        # Debugging styling
         self.text.tag_configure(
             "bp",
             background="#ff6b3d",
@@ -677,23 +591,23 @@ class App(ttk.Frame):
         self.text.tag_configure(
             "ip",
             background="#00d1a0",
-            foreground="#011b04"
+            foreground="#011b04",
         )   # IP: mint
         self.text.tag_configure(
             "hover_cell",
             background="#0a2516",
             foreground="#4ed05d"
         )
-        
+
         self.text.tag_raise("ip")
         self.text.tag_raise("bp")
         self.text.tag_raise("hover_cell")
 
-        # Status bar.
+        # Status bar
         self.status = ttk.Label(self, anchor=tk.W)
-        self.status.pack(fill=tk.X)
+        self.status.pack(fill=tk.X, pady=(2, 4))
 
-        # Bind delay/steps text.
+        # Bind delay/steps text
         self._bind_value_labels()
 
         self._update_run_buttons()
@@ -744,14 +658,11 @@ class App(ttk.Frame):
             self.status.config(text="No program is loaded")
             return
         
-        # Ensure output window is open.
-        self.open_output_window(clear=clear_output)
-
-        # Pre-fill output if cleared to avoid inserting full backlog.
+        # Clear or initialize output
         if clear_output:
+            self._clear_output_text()
             self._prefill_output_from_interpreter()
 
-        # Begin execution loop.
         self.tick()
 
     def _update_run_buttons(self) -> None:
@@ -774,10 +685,9 @@ class App(ttk.Frame):
             self.bell()
             self.status.config(text="No program loaded")
             return
-
-        # Ensure output window is open but don't clear.
-        if not (self._out_win and self._out_win.winfo_exists()):
-            self.open_output_window(clear=False)
+        
+        # Initialize output length
+        if not hasattr(self, "_out_len") or self._out_len == 0:
             self._out_len = len(self.interp.output)
 
         status = self.interp.step()
@@ -823,6 +733,7 @@ class App(ttk.Frame):
             self._show_input_bar()
         else:
             self._cancel_timer()
+            self._execution_mode = ExecutionMode.STOPPED
     
     def stop(self) -> None:
         """Stop automatic execution but keep the output window open."""
@@ -857,48 +768,40 @@ class App(ttk.Frame):
             self._after = None
 
     def _build_input_bar(self) -> None:
-        """Create the input bar for handling Befunge input operations.
-
-        The bar is shown when the interpreter encounters '&' (integer input)
-        or '~' (character input) and hidden otherwise.
-        """
+        """Create the input bar."""
         bar = ttk.Frame(self)
         lbl = ttk.Label(bar, text="Input:")
         ent = ttk.Entry(bar, width=18)
         btn_send = ttk.Button(bar, text="Send", command=self.send_input)
         btn_cancel = ttk.Button(bar, text="Cancel", command=self._hide_input_bar)
 
-        lbl.pack(side="left")
-        ent.pack(side="left", padx=(6,6))
-        btn_send.pack(side="left")
-        btn_cancel.pack(side="left", padx=(6,0))
+        lbl.pack(side=tk.LEFT)
+        ent.pack(side=tk.LEFT, padx=(6, 6))
+        btn_send.pack(side=tk.LEFT)
+        btn_cancel.pack(side=tk.LEFT, padx=(6, 0))
 
-        # Store references.
+        # Store references
         self.input_bar = bar
         self.input_label = lbl
         self.input_entry = ent
 
-        # Keyboard shortcuts for input.
+        # Keyboard shortcuts
         ent.bind("<Return>", lambda e: self.send_input())
         ent.bind("<Escape>", lambda e: self._hide_input_bar())
 
-        # Start hidden.
+        # Start hidden
         self.input_bar.pack_forget()
 
     def _show_input_bar(self) -> None:
-        """Display the input bar and focus the entry field.
-
-        Shows the appropriate prompt based on the expected input type (int for
-        '&', char for '~') and focuses the entry for typing.
-        """
-        kind = getattr(self.interp.ip, "waiting_for", None) # WaitTypes.INT or WaitTypes.CHAR
+        """Display the input bar and focus the entry field."""
+        kind = getattr(self.interp.ip, "waiting_for", None)
         if not isinstance(kind, WaitTypes):
             return
-    
+        
         self.input_label.config(text=f"Input ({kind.value}):")
         self.input_entry.delete(0, tk.END)
 
-        self.input_bar.pack(fill="x", padx=8, pady=(4,8))
+        self.input_bar.pack(fill=tk.X, padx=8, pady=(4, 8))
 
         self.input_entry.focus_set()
         self.input_entry.select_range(0, tk.END)
@@ -909,12 +812,7 @@ class App(ttk.Frame):
             self.input_bar.pack_forget()
 
     def send_input(self) -> None:
-        """Validate user input and send it to the interpreter.
-
-        Validates the input based on the expected type (integer or character),
-        sends it to the interpreter, hides the input bar, and resumes execution.
-        Provides audio feedback for invalid numeric input.
-        """
+        """Validate user input and send it to the interpreter."""
         kind = getattr(self.interp.ip, "waiting_for", None)
         s = self.input_entry.get()
 
@@ -1126,16 +1024,16 @@ class App(ttk.Frame):
 
     def _prefill_output_from_interpreter(self) -> None:
         """Initialize output window with current interpreter output."""
-        if not (self._out_win and self._out_txt and self._out_win.winfo_exists()):
+        if not hasattr(self, "output_text"):
             return
         
-        self._out_txt.configure(state=tk.NORMAL)
-        self._out_txt.delete("1.0", tk.END)
+        self.output_text.configure(state=tk.NORMAL)
+        self.output_text.delete("1.0", tk.END)
 
         if self.interp.output:
-            self._out_txt.insert(tk.END, self.interp.output)
+            self.output_text.insert(tk.END, self.interp.output)
         
-        self._out_txt.configure(state=tk.DISABLED)
+        self.output_text.configure(state=tk.DISABLED)
 
         # Mark what's been shown-only append deltas later.
         self._out_len = len(self.interp.output)
@@ -1156,13 +1054,6 @@ class App(ttk.Frame):
         try:
             if hasattr(self, "_hover") and self._hover:
                 self._hover.dispose()
-        except Exception:
-            pass
-
-        # Close output window.
-        try:
-            if self._out_win and self._out_win.winfo_exists():
-                self._out_win.destroy()
         except Exception:
             pass
 

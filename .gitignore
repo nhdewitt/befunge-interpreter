@@ -13,3 +13,4 @@ dist/
 main.spec
 tools/
 src/*.txt
+.pytest_cache/

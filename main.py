@@ -84,6 +84,8 @@ def main():
                         "The file does not appear to be valid Befunge-93 source code.",
                         parent=root
                     )
+                    src = ""
+                    path = None
 
     root.deiconify()
     launch_app(root, src, path if not open_on_start else None, open_on_start)
