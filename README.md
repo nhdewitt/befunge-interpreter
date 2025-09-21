@@ -6,7 +6,7 @@ A complete Befunge-93 interpreter with an interactive GUI debugger and developme
 
 **befunge-gui** is a full-featured implementation of the Befunge-93 programming language with real-time visualization, interactive debugging, and comprehensive development tools. Befunge is a two-dimensional, stack-based esoteric programming language where the instruction pointer moves through a grid of characters.
 
-![Befunge GUI Screenshot](screenshot.png)
+![Befunge GUI Screenshot](docs/befunge-93.png)
 *Real-time execution with IP tracking, stack visualization, and interactive tooltips*
 
 ## Features
