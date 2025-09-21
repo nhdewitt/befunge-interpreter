@@ -1,12 +1,12 @@
-# befunge-gui
+# befunge-interpreter
 
 A complete Befunge-93 interpreter with an interactive GUI debugger and development environment.
 
 ## Overview
 
-**befunge-gui** is a full-featured implementation of the Befunge-93 programming language with real-time visualization, interactive debugging, and comprehensive development tools. Befunge is a two-dimensional, stack-based esoteric programming language where the instruction pointer moves through a grid of characters.
+**befunge-interpreter** is a full-featured implementation of the Befunge-93 programming language with real-time visualization, interactive debugging, and comprehensive development tools. Befunge is a two-dimensional, stack-based esoteric programming language where the instruction pointer moves through a grid of characters.
 
-![Befunge GUI Screenshot](docs/befunge-93.png)
+![Befunge GUI Screenshot](docs/befunge-interpreter.png)
 *Real-time execution with IP tracking, stack visualization, and interactive tooltips*
 
 ## Features
@@ -42,15 +42,15 @@ A complete Befunge-93 interpreter with an interactive GUI debugger and developme
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/befunge-gui.git
-cd befunge-gui
+git clone https://github.com/yourusername/befunge-interpreter.git
+cd befunge-interpreter
 
 # Run with file dialog
 python main.py
 
 # Open a specific file
 python main.py examples/hello.bf
-python main.py program.befunge
+python main.py src/[program].bf
 ```
 
 ### Supported File Formats
@@ -82,7 +82,7 @@ python main.py program.befunge
 ## Architecture
 
 ```
-befunge-gui/
+befunge-interpreter/
 ├── core/                      # Interpreter engine
 │   ├── interpreter.py         # Main interpreter with extended storage
 │   ├── InstructionPointer.py  # IP management and grid navigation
@@ -163,22 +163,6 @@ Each Befunge file automatically gets a settings sidecar:
 }
 ```
 
-### API Usage
-```python
-from core.interpreter import Interpreter
-
-# Create interpreter
-interp = Interpreter(">91+.@")
-
-# Step through execution
-while True:
-    status = interp.step()
-    if status != StepStatus.RUNNING:
-        break
-
-print(interp.output)  # "10"
-```
-
 ## Technical Highlights
 
 ### Performance Optimizations
@@ -197,16 +181,15 @@ print(interp.output)  # "10"
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with tests
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ### Development Setup
 ```bash
 # Clone and setup
-git clone https://github.com/yourusername/befunge-gui.git
-cd befunge-gui
+git clone https://github.com/yourusername/befunge-interpreter.git
+cd befunge-interpreter
 
 # Run tests (when available)
 python -m pytest
@@ -222,8 +205,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - [Befunge-93 Specification](https://catseye.tc/view/Befunge-93/doc/Befunge-93.markdown) by Chris Pressey
-- The esoteric programming language community
-- Contributors and testers who helped refine the implementation
 
 ## Alternatives
 
@@ -234,5 +215,3 @@ If **befunge-gui** doesn't meet your needs, consider these alternatives:
 - **jefunge** - Web-based Befunge interpreter
 
 ---
-
-*Built with ❤️ for the esoteric programming community*

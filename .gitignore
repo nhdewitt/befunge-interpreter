@@ -4,7 +4,6 @@ __pycache__/
 .vscode/
 *.code-workspace
 *.log
-*.bf
 .vscode/
 *.befmeta.*
 tests/
@@ -12,5 +11,5 @@ build/
 dist/
 main.spec
 tools/
-src/*.txt
+src/*
 .pytest_cache/
